@@ -16,17 +16,19 @@ except ImportError:
     Select = None
     EC = None
 
+_FREQUENCY_TO_VALUE = {
+    "1d": "d",
+    "1wk": "w",
+    "1mo": "m",
+    "3mo": "q",
+    "1y": "y",
+}
+
 
 class StooqFetcher(DataSourceFetcher):
     source_name = "stooq"
 
-    _FREQUENCY_MAP = {
-        "1d": 1,
-        "1wk": 2,
-        "1mo": 3,
-        "3mo": 4,
-        "1y": 5,
-    }
+    _FREQUENCY_MAP = _FREQUENCY_TO_VALUE
 
     def _validate_frequency(self, frequency: str) -> bool:
         if frequency not in self._FREQUENCY_MAP:
@@ -55,30 +57,27 @@ class StooqFetcher(DataSourceFetcher):
         start: str | None,
         end: str | None,
     ) -> None:
-        date_td = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "table.table1 > tbody > tr > td:nth-child(1)")
-            )
-        )
-
-        date_inputs = date_td.find_elements(By.CSS_SELECTOR, "input[type='text']")
-        date_selects = date_td.find_elements(By.CSS_SELECTOR, "select")
-
         if start:
             year, month, day = start.split("-")
-            Select(date_selects[0]).select_by_visible_text(month.zfill(2))
-            date_inputs[0].clear()
-            date_inputs[0].send_keys(day)
-            date_inputs[1].clear()
-            date_inputs[1].send_keys(year)
+            day_input = driver.find_element(By.NAME, "d7")
+            year_input = driver.find_element(By.NAME, "d3")
+            month_select = Select(driver.find_element(By.NAME, "d5"))
+            day_input.clear()
+            day_input.send_keys(day)
+            year_input.clear()
+            year_input.send_keys(year)
+            month_select.select_by_visible_text(month.zfill(2))
 
         if end:
             year, month, day = end.split("-")
-            Select(date_selects[1]).select_by_visible_text(month.zfill(2))
-            date_inputs[2].clear()
-            date_inputs[2].send_keys(day)
-            date_inputs[3].clear()
-            date_inputs[3].send_keys(year)
+            day_input = driver.find_element(By.NAME, "d8")
+            year_input = driver.find_element(By.NAME, "d4")
+            month_select = Select(driver.find_element(By.NAME, "d6"))
+            day_input.clear()
+            day_input.send_keys(day)
+            year_input.clear()
+            year_input.send_keys(year)
+            month_select.select_by_visible_text(month.zfill(2))
 
     def fetch(
         self,
@@ -88,54 +87,60 @@ class StooqFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
+        import time
+
         driver = None
         try:
             options = uc.ChromeOptions()
-            options.add_argument("--headless")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
 
             driver = uc.Chrome(options=options)
-            driver.save_creds()
 
             url = f"https://stooq.com/q/d/?s={symbol}"
             driver.get(url)
             WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table1"))
+                EC.presence_of_element_located((By.NAME, "i"))
             )
+            time.sleep(2)
+
+            # Remove any overlay that blocks clicks
+            overlay = driver.find_elements(By.ID, "drk_scr")
+            for o in overlay:
+                driver.execute_script("arguments[0].remove();", o)
 
             if frequency:
                 self._validate_frequency(frequency)
-                btn_index = self._FREQUENCY_MAP[frequency]
-                freq_btn = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, f"table.table1 tr td:nth-child(2) input:nth-of-type({btn_index})")
+                freq_value = self._FREQUENCY_MAP[frequency]
+                radio = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, f"input[type=radio][name=i][value={freq_value}]")
                     )
                 )
-                freq_btn.click()
+                driver.execute_script("arguments[0].click();", radio)
+                time.sleep(1)
 
             if start or end:
                 self._set_date_range(driver, start, end)
 
-            update_btn = WebDriverWait(driver, 10).until(
+            show_btn = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "table.table1 tr td:nth-child(1) input[type='submit']")
+                    (By.CSS_SELECTOR, "input[type=submit][value=Show]")
                 )
             )
-            update_btn.click()
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table2"))
-            )
+            show_btn.click()
+            time.sleep(5)
 
-            csv_link = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "center b font a")
+            dl_link = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "a[href^='q/d/l/']")
                 )
             )
-            csv_url = csv_link.get_attribute("href")
+            csv_url = dl_link.get_attribute("href")
             if not csv_url:
                 raise FetchError("Could not retrieve CSV download URL")
+            if not csv_url.startswith("http"):
+                csv_url = f"https://stooq.com/{csv_url}"
 
             resp = requests.get(csv_url, timeout=30)
             resp.raise_for_status()

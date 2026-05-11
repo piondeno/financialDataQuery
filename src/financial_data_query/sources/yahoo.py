@@ -18,17 +18,9 @@ class YahooFetcher(DataSourceFetcher):
     source_name = "yahoo"
 
     _FREQUENCY_MAP = {
-        "daily": "D",
-        "weekly": "W-FRI",
-        "monthly": "ME",
-    }
-
-    _OHLCV_AGG = {
-        "Open": "first",
-        "High": "max",
-        "Low": "min",
-        "Close": "last",
-        "Volume": "sum",
+        "daily": "1d",
+        "weekly": "1wk",
+        "monthly": "1mo",
     }
 
     def fetch(
@@ -46,20 +38,18 @@ class YahooFetcher(DataSourceFetcher):
         if end:
             kwargs["end"] = end
 
-        df = ticker.history(**kwargs)
-
-        if df.empty:
-            raise FetchError(f"No data returned for Yahoo symbol '{symbol}'")
-
         if frequency:
             freq_key = frequency.lower()
             if freq_key not in self._FREQUENCY_MAP:
                 raise FetchError(
                     f"Invalid frequency '{frequency}'. Must be one of: daily, weekly, monthly"
                 )
-            resample_rule = self._FREQUENCY_MAP[freq_key]
-            df = df.resample(resample_rule).agg(self._OHLCV_AGG)
-            df = df[df["Close"].notna()]
+            kwargs["interval"] = self._FREQUENCY_MAP[freq_key]
+
+        df = ticker.history(**kwargs)
+
+        if df.empty:
+            raise FetchError(f"No data returned for Yahoo symbol '{symbol}'")
 
         if sub_field:
             col = _YAHOO_COLUMN_MAP.get(sub_field.lower())

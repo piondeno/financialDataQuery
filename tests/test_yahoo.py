@@ -57,44 +57,34 @@ class TestYahooFetcher:
                 fetcher.fetch("INVALID_SYMBOL")
 
     def test_fetch_frequency_weekly(self, fetcher):
-        dates = pd.date_range("2024-01-01", periods=14, freq="D")
         mock_df = pd.DataFrame(
-            {
-                "Open": range(14),
-                "High": range(14, 28),
-                "Low": range(7, 21),
-                "Close": range(21, 35),
-                "Volume": range(100, 114),
-            },
-            index=dates,
+            {"Close": [150.0, 152.0]},
+            index=pd.to_datetime(["2024-01-05", "2024-01-12"]),
         )
         with mock.patch("yfinance.Ticker") as MockTicker:
             MockTicker.return_value.history.return_value = mock_df
-            result = fetcher.fetch("AAPL", frequency="weekly")
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) < len(mock_df)
-        assert "Open" in result.columns
-        assert "Close" in result.columns
+            fetcher.fetch("AAPL", frequency="weekly")
+            MockTicker.return_value.history.assert_called_once_with(interval="1wk")
 
     def test_fetch_frequency_monthly(self, fetcher):
-        dates = pd.date_range("2024-01-01", periods=62, freq="D")
         mock_df = pd.DataFrame(
-            {
-                "Open": range(62),
-                "High": range(62, 124),
-                "Low": range(31, 93),
-                "Close": range(93, 155),
-                "Volume": range(100, 162),
-            },
-            index=dates,
+            {"Close": [150.0, 155.0]},
+            index=pd.to_datetime(["2024-01-31", "2024-02-29"]),
         )
         with mock.patch("yfinance.Ticker") as MockTicker:
             MockTicker.return_value.history.return_value = mock_df
-            result = fetcher.fetch("AAPL", frequency="monthly")
-        assert isinstance(result, pd.DataFrame)
-        assert len(result) < len(mock_df)
-        assert "Open" in result.columns
-        assert "Close" in result.columns
+            fetcher.fetch("AAPL", frequency="monthly")
+            MockTicker.return_value.history.assert_called_once_with(interval="1mo")
+
+    def test_fetch_frequency_daily(self, fetcher):
+        mock_df = pd.DataFrame(
+            {"Close": [150.0]},
+            index=pd.to_datetime(["2024-01-01"]),
+        )
+        with mock.patch("yfinance.Ticker") as MockTicker:
+            MockTicker.return_value.history.return_value = mock_df
+            fetcher.fetch("AAPL", frequency="daily")
+            MockTicker.return_value.history.assert_called_once_with(interval="1d")
 
     def test_fetch_frequency_invalid_raises(self, fetcher):
         mock_df = pd.DataFrame(

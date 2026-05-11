@@ -114,3 +114,7 @@ class TestStooqFetcher:
             with pytest.raises(Exception):
                 fetcher.fetch("dx.c")
         mock_driver.quit.assert_called_once()
+
+    def test_fetcher_is_registered(self, fetcher):
+        from financial_data_query.registry import Registry
+        assert Registry.is_registered("stooq")

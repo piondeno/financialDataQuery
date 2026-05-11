@@ -16,6 +16,10 @@ dev = [
     "pytest-mock>=3.10",
     "responses>=0.25",
 ]
+stooq = [
+    "undetected-chromedriver>=3.5",
+    "selenium>=4.0",
+]
 
 [build-system]
 requires = ["setuptools>=68.0"]

@@ -15,6 +15,7 @@ def query(
     start: str | None = None,
     end: str | None = None,
     sub_field: str | None = None,
+    frequency: str | None = None,
     use_cache: bool = True,
 ) -> pd.DataFrame:
     """Query financial data from a registered source.
@@ -25,6 +26,7 @@ def query(
         start: Start date (YYYY-MM-DD), optional
         end: End date (YYYY-MM-DD), optional
         sub_field: Specific column to return, optional
+        frequency: Data frequency - 'daily', 'weekly', or 'monthly' (Yahoo only)
         use_cache: Use in-memory cache, default True
 
     Returns:
@@ -33,15 +35,15 @@ def query(
     _import_sources()
 
     if use_cache:
-        cached = _cache.get(source, symbol, start, end, sub_field)
+        cached = _cache.get(source, symbol, start, end, sub_field, frequency)
         if cached is not None:
             return cached
 
     fetcher = Registry.get(source)
-    df = fetcher.fetch(symbol, start=start, end=end, sub_field=sub_field)
+    df = fetcher.fetch(symbol, start=start, end=end, sub_field=sub_field, frequency=frequency)
 
     if use_cache:
-        _cache.set(source, symbol, df, start=start, end=end, sub_field=sub_field)
+        _cache.set(source, symbol, df, start=start, end=end, sub_field=sub_field, frequency=frequency)
 
     return df
 

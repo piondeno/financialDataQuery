@@ -45,3 +45,15 @@ def test_cache_with_sub_field():
     result_open = cache.get("yahoo", "AAPL", sub_field="open")
     pd.testing.assert_frame_equal(result_close, df1)
     pd.testing.assert_frame_equal(result_open, df2)
+
+
+def test_cache_with_frequency():
+    cache = QueryCache()
+    df_daily = pd.DataFrame({"close": [1]}, index=pd.to_datetime(["2024-01-01"]))
+    df_weekly = pd.DataFrame({"close": [2]}, index=pd.to_datetime(["2024-01-05"]))
+    cache.set("yahoo", "AAPL", df_daily, frequency="daily")
+    cache.set("yahoo", "AAPL", df_weekly, frequency="weekly")
+    result_daily = cache.get("yahoo", "AAPL", frequency="daily")
+    result_weekly = cache.get("yahoo", "AAPL", frequency="weekly")
+    pd.testing.assert_frame_equal(result_daily, df_daily)
+    pd.testing.assert_frame_equal(result_weekly, df_weekly)

@@ -17,12 +17,27 @@ _YAHOO_COLUMN_MAP = {
 class YahooFetcher(DataSourceFetcher):
     source_name = "yahoo"
 
+    _FREQUENCY_MAP = {
+        "daily": "D",
+        "weekly": "W-FRI",
+        "monthly": "ME",
+    }
+
+    _OHLCV_AGG = {
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum",
+    }
+
     def fetch(
         self,
         symbol: str,
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
+        frequency: str | None = None,
     ) -> pd.DataFrame:
         ticker = yf.Ticker(symbol)
         kwargs = {}
@@ -35,6 +50,16 @@ class YahooFetcher(DataSourceFetcher):
 
         if df.empty:
             raise FetchError(f"No data returned for Yahoo symbol '{symbol}'")
+
+        if frequency:
+            freq_key = frequency.lower()
+            if freq_key not in self._FREQUENCY_MAP:
+                raise FetchError(
+                    f"Invalid frequency '{frequency}'. Must be one of: daily, weekly, monthly"
+                )
+            resample_rule = self._FREQUENCY_MAP[freq_key]
+            df = df.resample(resample_rule).agg(self._OHLCV_AGG)
+            df = df[df["Close"].notna()]
 
         if sub_field:
             col = _YAHOO_COLUMN_MAP.get(sub_field.lower())

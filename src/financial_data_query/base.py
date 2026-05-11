@@ -14,6 +14,7 @@ class DataSourceFetcher(ABC):
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
+        frequency: str | None = None,
     ) -> pd.DataFrame:
         """Fetch data and return as a DataFrame with DatetimeIndex."""
         ...

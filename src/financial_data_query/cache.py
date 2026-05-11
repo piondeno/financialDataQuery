@@ -6,7 +6,7 @@ class QueryCache:
     """In-memory LRU cache for query results."""
 
     def __init__(self, max_size: int = 128):
-        self._cache: OrderedDict[tuple[str, str, str | None, str | None, str | None], pd.DataFrame] = OrderedDict()
+        self.   _cache: OrderedDict[tuple[str, str, str | None, str | None, str | None, str | None], pd.DataFrame] = OrderedDict()
         self._max_size = max_size
 
     def _key(
@@ -16,8 +16,9 @@ class QueryCache:
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
-    ) -> tuple[str, str, str | None, str | None, str | None]:
-        return (source, symbol, start, end, sub_field)
+        frequency: str | None = None,
+    ) -> tuple[str, str, str | None, str | None, str | None, str | None]:
+        return (source, symbol, start, end, sub_field, frequency)
 
     def get(
         self,
@@ -26,8 +27,9 @@ class QueryCache:
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
+        frequency: str | None = None,
     ) -> pd.DataFrame | None:
-        key = self._key(source, symbol, start, end, sub_field)
+        key = self._key(source, symbol, start, end, sub_field, frequency)
         if key in self._cache:
             self._cache.move_to_end(key)
             return self._cache[key]
@@ -41,8 +43,9 @@ class QueryCache:
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
+        frequency: str | None = None,
     ) -> None:
-        key = self._key(source, symbol, start, end, sub_field)
+        key = self._key(source, symbol, start, end, sub_field, frequency)
         if key in self._cache:
             self._cache.move_to_end(key)
         self._cache[key] = df

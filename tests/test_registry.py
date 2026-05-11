@@ -8,7 +8,7 @@ from financial_data_query.errors import DataSourceNotFoundError
 class MockFetcher(DataSourceFetcher):
     source_name = "mock"
 
-    def fetch(self, symbol, start=None, end=None, sub_field=None):
+    def fetch(self, symbol, start=None, end=None, sub_field=None, frequency=None):
         return pd.DataFrame({"value": [1]}, index=pd.to_datetime(["2024-01-01"]))
 
 

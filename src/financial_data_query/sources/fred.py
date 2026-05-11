@@ -20,6 +20,7 @@ class FredFetcher(DataSourceFetcher):
         start: str | None = None,
         end: str | None = None,
         sub_field: str | None = None,
+        frequency: str | None = None,
     ) -> pd.DataFrame:
         api_key = get_config("FRED_API_KEY")
         if not api_key:

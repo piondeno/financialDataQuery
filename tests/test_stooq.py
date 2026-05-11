@@ -21,3 +21,18 @@ class TestStooqFetcher:
         assert len(df) == 2
         assert isinstance(df.index, pd.DatetimeIndex)
         assert "Close" in df.columns
+
+    def test_frequency_map_contains_all_intervals(self, fetcher):
+        assert "1d" in fetcher._FREQUENCY_MAP
+        assert "1wk" in fetcher._FREQUENCY_MAP
+        assert "1mo" in fetcher._FREQUENCY_MAP
+        assert "3mo" in fetcher._FREQUENCY_MAP
+        assert "1y" in fetcher._FREQUENCY_MAP
+
+    def test_validate_frequency_valid(self, fetcher):
+        for freq in ["1d", "1wk", "1mo", "3mo", "1y"]:
+            assert fetcher._validate_frequency(freq) is True
+
+    def test_validate_frequency_invalid_raises(self, fetcher):
+        with pytest.raises(FetchError, match="Invalid frequency"):
+            fetcher._validate_frequency("5m")

@@ -7,6 +7,22 @@ from financial_data_query.errors import FetchError
 class StooqFetcher(DataSourceFetcher):
     source_name = "stooq"
 
+    _FREQUENCY_MAP = {
+        "1d": 1,
+        "1wk": 2,
+        "1mo": 3,
+        "3mo": 4,
+        "1y": 5,
+    }
+
+    def _validate_frequency(self, frequency: str) -> bool:
+        if frequency not in self._FREQUENCY_MAP:
+            raise FetchError(
+                f"Invalid frequency '{frequency}'. "
+                f"Must be one of: {', '.join(self._FREQUENCY_MAP.keys())}"
+            )
+        return True
+
     def _parse_csv(self, csv_content: str) -> pd.DataFrame:
         df = pd.read_csv(io.StringIO(csv_content))
         if df.empty:

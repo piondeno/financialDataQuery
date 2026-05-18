@@ -21,5 +21,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.ici import IciFetcher
+    Registry.register(IciFetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

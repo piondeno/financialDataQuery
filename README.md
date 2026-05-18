@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -67,7 +67,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 from financial_data_query import list_sources, register_source, clear_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin']
+list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici']
 
 # 清除記憶體快取
 clear_cache()
@@ -138,6 +138,73 @@ result = query("finra_margin", "free_credit_cash", start="2024-01", end="2024-06
 
 # 批量查詢多個指標
 result = query("finra_margin", ["debit_balances", "free_credit_margin"])
+```
+
+### ICI Fund Flows (`"ici"`)
+
+- 底層：直接下載 ICI 發布的 XLS 檔案
+- 免 API key
+- 資料來源：Investment Company Institute
+- 資料範圍：2024-01 至今，每週更新
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `mf_total` | 共同基金總淨現金流 |
+| `mf_equity_total` | 股票型基金合計 |
+| `mf_equity_domestic_total` | 國內股票型基金合計 |
+| `mf_equity_domestic_large` | 國內大型股 |
+| `mf_equity_domestic_mid` | 國內中型股 |
+| `mf_equity_domestic_small` | 國內小型股 |
+| `mf_equity_domestic_multi` | 國內多類股 |
+| `mf_equity_domestic_other` | 國內其他 |
+| `mf_equity_world_total` | 全球股票型基金合計 |
+| `mf_equity_world_developed` | 已開發市場 |
+| `mf_equity_world_emerging` | 新興市場 |
+| `mf_hybrid` | 混合型基金 |
+| `mf_bond_total` | 債券型基金合計 |
+| `mf_bond_taxable_total` | 課稅債券合計 |
+| `mf_bond_taxable_investment` | 投資等級 |
+| `mf_bond_taxable_highyield` | 高收益 |
+| `mf_bond_taxable_government` | 政府債券 |
+| `mf_bond_taxable_multisector` | 多部門 |
+| `mf_bond_taxable_global` | 全球債券 |
+| `mf_bond_municipal` | 地方政府債券 |
+| `etf_total` | ETF 總淨發行量 |
+| `etf_equity_total` | 股票型 ETF 合計 |
+| `etf_equity_domestic` | 國內股票型 ETF |
+| `etf_equity_world` | 全球股票型 ETF |
+| `etf_hybrid` | 混合型 ETF |
+| `etf_bond_total` | 債券型 ETF 合計 |
+| `etf_bond_taxable` | 課稅債券型 ETF |
+| `etf_bond_municipal` | 地方政府債券型 ETF |
+| `etf_commodity` | 商品型 ETF |
+| `combined_total` | 總長期基金+ETF 資金流量 |
+| `combined_equity_total` | 股票型基金+ETF 合計 |
+| `combined_equity_domestic` | 國內股票型基金+ETF |
+| `combined_equity_world` | 全球股票型基金+ETF |
+| `combined_hybrid` | 混合型基金+ETF |
+| `combined_bond_total` | 債券型基金+ETF 合計 |
+| `combined_bond_taxable` | 課稅債券型基金+ETF |
+| `combined_bond_municipal` | 地方政府債券型基金+ETF |
+| `combined_commodity` | 商品型基金+ETF |
+
+```python
+# 安裝額外依賴
+pip install -e ".[ici]"
+
+# 查詢共同基金總淨現金流
+result = query("ici", "mf_total")
+
+# 查詢 ETF 總淨發行量
+result = query("ici", "etf_total")
+
+# 指定日期範圍
+result = query("ici", "mf_equity_total", start="2024-01-01", end="2024-06-30")
+
+# 批量查詢
+result = query("ici", ["mf_total", "etf_total", "combined_total"])
 ```
 
 ## 設定

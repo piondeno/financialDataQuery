@@ -22,43 +22,43 @@ _SYMBOL_MAP = {
     # Mutual Fund
     "mf_total": ("mf", "Total long-term"),
     "mf_equity_total": ("mf", "Equity Total equity"),
-    "mf_equity_domestic_total": ("mf", "Equity Domestic Total domestic"),
-    "mf_equity_domestic_large": ("mf", "Equity Domestic Large cap"),
-    "mf_equity_domestic_mid": ("mf", "Equity Domestic Mid cap"),
-    "mf_equity_domestic_small": ("mf", "Equity Domestic Small cap"),
-    "mf_equity_domestic_multi": ("mf", "Equity Domestic Multi cap"),
-    "mf_equity_domestic_other": ("mf", "Equity Domestic Other"),
-    "mf_equity_world_total": ("mf", "Equity Total world"),
-    "mf_equity_world_developed": ("mf", "Equity Developed markets"),
-    "mf_equity_world_emerging": ("mf", "Equity Emerging markets"),
+    "mf_equity_domestic_total": ("mf", "Domestic Total domestic"),
+    "mf_equity_domestic_large": ("mf", "Large cap"),
+    "mf_equity_domestic_mid": ("mf", "Mid cap"),
+    "mf_equity_domestic_small": ("mf", "Small cap"),
+    "mf_equity_domestic_multi": ("mf", "Multi cap"),
+    "mf_equity_domestic_other": ("mf", "Other"),
+    "mf_equity_world_total": ("mf", "World Total world"),
+    "mf_equity_world_developed": ("mf", "Developed markets"),
+    "mf_equity_world_emerging": ("mf", "Emerging markets"),
     "mf_hybrid": ("mf", "Hybrid"),
     "mf_bond_total": ("mf", "Bond Total bond"),
-    "mf_bond_taxable_total": ("mf", "Bond Total taxable"),
-    "mf_bond_taxable_investment": ("mf", "Bond Investment grade"),
-    "mf_bond_taxable_highyield": ("mf", "Bond High yield"),
-    "mf_bond_taxable_government": ("mf", "Bond Government"),
-    "mf_bond_taxable_multisector": ("mf", "Bond Multisector"),
-    "mf_bond_taxable_global": ("mf", "Bond Global"),
+    "mf_bond_taxable_total": ("mf", "Taxable Total taxable"),
+    "mf_bond_taxable_investment": ("mf", "Investment grade"),
+    "mf_bond_taxable_highyield": ("mf", "High yield"),
+    "mf_bond_taxable_government": ("mf", "Government"),
+    "mf_bond_taxable_multisector": ("mf", "Multisector"),
+    "mf_bond_taxable_global": ("mf", "Global"),
     "mf_bond_municipal": ("mf", "Municipal"),
     # ETF
     "etf_total": ("etf", "Total ETFs"),
     "etf_equity_total": ("etf", "Equity Total"),
-    "etf_equity_domestic": ("etf", "Equity Domestic"),
-    "etf_equity_world": ("etf", "Equity World"),
+    "etf_equity_domestic": ("etf", "Domestic"),
+    "etf_equity_world": ("etf", "World"),
     "etf_hybrid": ("etf", "Hybrid"),
     "etf_bond_total": ("etf", "Bond Total"),
-    "etf_bond_taxable": ("etf", "Bond Taxable"),
-    "etf_bond_municipal": ("etf", "Bond Municipal"),
+    "etf_bond_taxable": ("etf", "Taxable"),
+    "etf_bond_municipal": ("etf", "Municipal"),
     "etf_commodity": ("etf", "Commodity"),
     # Combined
     "combined_total": ("combined", "Total LT MF and ETF flows"),
     "combined_equity_total": ("combined", "Equity Total"),
-    "combined_equity_domestic": ("combined", "Equity Domestic"),
-    "combined_equity_world": ("combined", "Equity World"),
+    "combined_equity_domestic": ("combined", "Domestic"),
+    "combined_equity_world": ("combined", "World"),
     "combined_hybrid": ("combined", "Hybrid"),
     "combined_bond_total": ("combined", "Bond Total"),
-    "combined_bond_taxable": ("combined", "Bond Taxable"),
-    "combined_bond_municipal": ("combined", "Bond Municipal"),
+    "combined_bond_taxable": ("combined", "Taxable"),
+    "combined_bond_municipal": ("combined", "Municipal"),
     "combined_commodity": ("combined", "Commodity"),
 }
 
@@ -125,8 +125,11 @@ class IciFetcher(DataSourceFetcher):
 
         merged_columns = self._merge_headers(df)
         date_col_values = df.iloc[7:, 0]
+        cleaned_dates = [
+            str(v).strip() if pd.notna(v) else v for v in date_col_values
+        ]
 
-        dates = pd.to_datetime(date_col_values, format="%m/%d/%Y", errors="coerce")
+        dates = pd.to_datetime(cleaned_dates, format="%m/%d/%Y", errors="coerce")
         data_rows = df.iloc[7:]
 
         col_idx = merged_columns.get(column_name)

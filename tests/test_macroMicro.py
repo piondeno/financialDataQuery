@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
-from financial_data_query.sources.macroMicro import _load_links, _save_links
+from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols
 
 
 class TestLoadLinks:
@@ -50,3 +50,41 @@ class TestSaveLinks:
             saved = json.load(f)
         assert saved == new_links
         assert "old" not in saved
+
+
+class TestUpdateReadmeSymbols:
+    def test_update_existing_markers(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Test\n<!-- MACROMICRO_SYMBOLS_START -->\n| old |\n<!-- MACROMICRO_SYMBOLS_END -->\nEnd")
+        links = {"sym1": {"url": "http://a.com", "description": "Desc 1"}}
+        _update_readme_symbols(links, str(readme))
+        content = readme.read_text()
+        assert "<!-- MACROMICRO_SYMBOLS_START -->" in content
+        assert "<!-- MACROMICRO_SYMBOLS_END -->" in content
+        assert "`sym1`" in content
+        assert "Desc 1" in content
+        assert "old" not in content
+
+    def test_add_markers_when_missing(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("## MacroMicro\n\nsome text\n")
+        links = {"sym1": {"url": "http://a.com", "description": "Desc 1"}}
+        _update_readme_symbols(links, str(readme))
+        content = readme.read_text()
+        assert "<!-- MACROMICRO_SYMBOLS_START -->" in content
+        assert "<!-- MACROMICRO_SYMBOLS_END -->" in content
+        assert "`sym1`" in content
+
+    def test_table_format_correct(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("<!-- MACROMICRO_SYMBOLS_START --><!-- MACROMICRO_SYMBOLS_END -->")
+        links = {
+            "sym1": {"url": "http://a.com", "description": "First"},
+            "sym2": {"url": "http://b.com", "description": "Second"}
+        }
+        _update_readme_symbols(links, str(readme))
+        content = readme.read_text()
+        assert "| Symbol | 說明 |" in content
+        assert "|--------|------|" in content
+        assert "| `sym1` | First |" in content
+        assert "| `sym2` | Second |" in content

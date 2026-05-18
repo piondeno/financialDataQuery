@@ -23,9 +23,10 @@ def test_list_sources_includes_builtins():
 
 def test_query_with_dummy_source():
     register_source(DummyFetcher)
-    df = query("dummy", "TEST")
-    assert isinstance(df, pd.DataFrame)
-    assert df.iloc[0]["value"] == 42.0
+    result = query("dummy", "TEST")
+    assert isinstance(result, dict)
+    assert "TEST" in result
+    assert result["TEST"][0]["value"] == 42.0
 
 
 def test_query_unregistered_source_raises():
@@ -48,11 +49,11 @@ def test_query_uses_cache():
             )
 
     register_source(CountingFetcher)
-    query("counting", "A")
-    query("counting", "A")
+    query("counting", "A", output="dataframe")
+    query("counting", "A", output="dataframe")
     assert call_count == 1, "Second call should hit cache"
 
-    query("counting", "A", use_cache=False)
+    query("counting", "A", output="dataframe", use_cache=False)
     assert call_count == 2, "use_cache=False should bypass cache"
 
 
@@ -71,9 +72,9 @@ def test_query_frequency_different_cache_entries():
             )
 
     register_source(FreqCountingFetcher)
-    query("freqcount", "A", frequency="daily")
-    query("freqcount", "A", frequency="weekly")
+    query("freqcount", "A", frequency="daily", output="dataframe")
+    query("freqcount", "A", frequency="weekly", output="dataframe")
     assert call_count == 2, "Different frequencies should not share cache"
 
-    query("freqcount", "A", frequency="daily")
+    query("freqcount", "A", frequency="daily", output="dataframe")
     assert call_count == 2, "Same frequency should hit cache"

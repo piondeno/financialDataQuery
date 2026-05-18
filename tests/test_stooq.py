@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import io
 from unittest import mock
 from contextlib import ExitStack
 from financial_data_query.sources.stooq import StooqFetcher
@@ -38,81 +37,78 @@ class TestStooqFetcher:
         with pytest.raises(FetchError, match="Invalid frequency"):
             fetcher._validate_frequency("5m")
 
-    def _setup_fetch_mocks(self, csv_content, csv_url="https://stooq.com/q/d/l?s=dx.c"):
-        mock_driver = mock.MagicMock()
-        mock_csv_link = mock.MagicMock()
-        mock_csv_link.get_attribute.return_value = csv_url
-
-        mock_uc = mock.MagicMock()
-        mock_uc.Chrome.return_value = mock_driver
-
-        mock_requests = mock.MagicMock()
-        mock_requests.get.return_value.text = csv_content
-
-        mock_by = mock.MagicMock()
-        mock_select = mock.MagicMock()
-        mock_wait = mock.MagicMock()
-        mock_wait.return_value.until.side_effect = lambda cond: mock_csv_link
-        mock_ec = mock.MagicMock()
-
-        patches = [
-            mock.patch("financial_data_query.sources.stooq.uc", mock_uc),
-            mock.patch("financial_data_query.sources.stooq.requests", mock_requests),
-            mock.patch("financial_data_query.sources.stooq.By", mock_by),
-            mock.patch("financial_data_query.sources.stooq.Select", mock_select),
-            mock.patch("financial_data_query.sources.stooq.WebDriverWait", mock_wait),
-            mock.patch("financial_data_query.sources.stooq.EC", mock_ec),
-        ]
-        return patches, mock_uc, mock_driver, mock_requests
-
     def test_fetch_returns_dataframe(self, fetcher):
         csv_content = "Date,Open,High,Low,Close,Volume\n2024-01-01,100,101,99,100.5,1000"
-        patches, mock_uc, mock_driver, mock_requests = self._setup_fetch_mocks(csv_content)
-        with ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
-            result = fetcher.fetch("dx.c")
+        expected_df = fetcher._parse_csv(csv_content)
+        mock_driver = mock.MagicMock()
+
+        with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", return_value=expected_df):
+                result = fetcher.fetch("dx.c")
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        mock_uc.Chrome.assert_called_once()
         mock_driver.quit.assert_called_once()
 
     def test_fetch_with_frequency(self, fetcher):
         csv_content = "Date,Open,High,Low,Close,Volume\n2024-01-01,100,101,99,100.5,1000"
-        patches, mock_uc, mock_driver, mock_requests = self._setup_fetch_mocks(csv_content)
-        with ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
-            result = fetcher.fetch("dx.c", frequency="1wk")
+        expected_df = fetcher._parse_csv(csv_content)
+        mock_driver = mock.MagicMock()
+
+        with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", return_value=expected_df) as m:
+                result = fetcher.fetch("dx.c", frequency="1wk")
         assert isinstance(result, pd.DataFrame)
+        m.assert_called_once()
+        call_kwargs = m.call_args[1]
+        assert call_kwargs["frequency"] == "1wk"
 
     def test_fetch_with_date_range(self, fetcher):
         csv_content = "Date,Open,High,Low,Close,Volume\n2024-06-01,100,101,99,100.5,1000"
-        patches, mock_uc, mock_driver, mock_requests = self._setup_fetch_mocks(csv_content)
-        with ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
-            result = fetcher.fetch("dx.c", start="2024-06-01", end="2024-12-31")
+        expected_df = fetcher._parse_csv(csv_content)
+        mock_driver = mock.MagicMock()
+
+        with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", return_value=expected_df) as m:
+                result = fetcher.fetch("dx.c", start="2024-06-01", end="2024-12-31")
         assert isinstance(result, pd.DataFrame)
+        call_kwargs = m.call_args[1]
+        assert call_kwargs["start"] == "2024-06-01"
+        assert call_kwargs["end"] == "2024-12-31"
 
     def test_fetch_empty_data_raises(self, fetcher):
-        csv_content = "Date,Open,High,Low,Close,Volume"
-        patches, mock_uc, mock_driver, mock_requests = self._setup_fetch_mocks(csv_content)
-        with ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
-            with pytest.raises(FetchError):
-                fetcher.fetch("INVALID")
+        mock_driver = mock.MagicMock()
+        with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", side_effect=FetchError("empty")):
+                with pytest.raises(FetchError):
+                    fetcher.fetch("INVALID")
 
     def test_fetch_closes_browser_on_error(self, fetcher):
         mock_driver = mock.MagicMock()
-        mock_driver.get.side_effect = Exception("Page load failed")
         mock_uc = mock.MagicMock()
         mock_uc.Chrome.return_value = mock_driver
 
-        with mock.patch("financial_data_query.sources.stooq.uc", mock_uc):
-            with pytest.raises(Exception):
-                fetcher.fetch("dx.c")
+        with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", side_effect=Exception("Page load failed")):
+                with pytest.raises(Exception):
+                    fetcher.fetch("dx.c")
+        mock_driver.quit.assert_called_once()
+
+    def test_batch_fetch_uses_single_driver(self, fetcher):
+        expected_df = fetcher._parse_csv("Date,Open,High,Low,Close,Volume\n2024-01-01,100,101,99,100.5,1000")
+        mock_driver = mock.MagicMock()
+        call_count = 0
+
+        def fake_create_driver():
+            nonlocal call_count
+            call_count += 1
+            return mock_driver
+
+        with mock.patch.object(fetcher, "_create_driver", side_effect=fake_create_driver):
+            with mock.patch.object(fetcher, "_fetch_with_driver", return_value=expected_df) as m:
+                results = fetcher.batch_fetch(["A", "B", "C"])
+        assert call_count == 1
+        assert m.call_count == 3
+        assert set(results.keys()) == {"A", "B", "C"}
         mock_driver.quit.assert_called_once()
 
     def test_fetcher_is_registered(self, fetcher):

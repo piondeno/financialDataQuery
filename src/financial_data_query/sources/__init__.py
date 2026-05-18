@@ -8,5 +8,18 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.tw_ndc import TwEcoFetcher, TwPmiFetcher
+    Registry.register(TwEcoFetcher)
+    Registry.register(TwPmiFetcher)
+except ImportError:
+    pass
+
+try:
+    from financial_data_query.sources.finra_margin import FinraMarginFetcher
+    Registry.register(FinraMarginFetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

@@ -53,7 +53,48 @@ def _update_readme_symbols(links: dict, readme_path: str | None = None) -> None:
         f.write(content)
 
 
-def macroMicroSymbolLinkConnect(symbol: str, url: str, description: str) -> None:
+def _symbol_from_url(url: str) -> str:
+    parts = url.rstrip("/").split("/")
+    return parts[-1] if parts else ""
+
+
+def _parse_title(title: str) -> str:
+    for sep in [" - MacroMicro", " | MacroMicro"]:
+        idx = title.find(sep)
+        if idx >= 0:
+            return title[:idx].strip()
+    return title.strip()
+
+
+def macroMicroSymbolLinkConnect(url: str) -> None:
+    if not uc:
+        raise FetchError(
+            "undetected-chromedriver 未安裝。"
+            "請執行: pip install financial-data-query[stooq]"
+        )
+
+    symbol = _symbol_from_url(url)
+    if not symbol:
+        raise FetchError(f"無法從 URL 提取商品代號: {url}")
+
+    driver = None
+    try:
+        options = uc.ChromeOptions()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        driver = uc.Chrome(options=options)
+        driver.get(url)
+        time.sleep(3)
+        page_title = driver.title
+        description = _parse_title(page_title) if page_title else ""
+    except FetchError:
+        raise
+    except Exception as e:
+        raise FetchError(f"無法存取 MacroMicro 頁面: {url}: {e}") from e
+    finally:
+        if driver:
+            driver.quit()
+
     links = _load_links()
     links[symbol] = {"url": url, "description": description}
     _save_links(links)

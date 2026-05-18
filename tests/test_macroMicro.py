@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
-from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols, macroMicroSymbolLinkConnect, MacroMicroFetcher
+from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols, _symbol_from_url, _parse_title, macroMicroSymbolLinkConnect, MacroMicroFetcher
 from financial_data_query.errors import FetchError
 
 
@@ -91,46 +91,77 @@ class TestUpdateReadmeSymbols:
         assert "| `sym2` | Second |" in content
 
 
-class TestMacroMicroSymbolLinkConnect:
-    def test_create_new_link(self, tmp_path):
-        json_file = str(tmp_path / ".macroMicro_links.json")
-        readme_file = str(tmp_path / "README.md")
-        readme = tmp_path / "README.md"
-        readme.write_text("")
-        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
-            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
-                macroMicroSymbolLinkConnect("sym1", "http://example.com", "Test Symbol")
-        with open(json_file, "r", encoding="utf-8") as f:
-            links = json.load(f)
-        assert links["sym1"]["url"] == "http://example.com"
-        assert links["sym1"]["description"] == "Test Symbol"
+class TestSymbolFromUrl:
+    def test_extract_last_segment(self):
+        assert _symbol_from_url("https://www.macromicro.me/series/5899/cn-dr007") == "cn-dr007"
 
-    def test_update_existing_link(self, tmp_path):
+    def test_extract_with_trailing_slash(self):
+        assert _symbol_from_url("https://www.macromicro.me/series/5899/cn-dr007/") == "cn-dr007"
+
+    def test_simple_url(self):
+        assert _symbol_from_url("http://example.com/sym1") == "sym1"
+
+
+class TestParseTitle:
+    def test_remove_macromicro_suffix(self):
+        assert _parse_title("中國-逆回購利率(日數據)-7天期 - MacroMicro") == "中國-逆回購利率(日數據)-7天期"
+
+    def test_pipe_separator(self):
+        assert _parse_title("Some Title | MacroMicro") == "Some Title"
+
+    def test_no_suffix(self):
+        assert _parse_title("Plain Title") == "Plain Title"
+
+
+class TestMacroMicroSymbolLinkConnect:
+    def test_missing_dependency_raises(self, tmp_path):
+        with patch("financial_data_query.sources.macroMicro.uc", None):
+            with pytest.raises(FetchError, match="undetected-chromedriver"):
+                macroMicroSymbolLinkConnect("https://www.macromicro.me/series/5899/cn-dr007")
+
+    def test_create_link_from_url(self, tmp_path):
         json_file = str(tmp_path / ".macroMicro_links.json")
         readme_file = str(tmp_path / "README.md")
         readme = tmp_path / "README.md"
         readme.write_text("")
-        with open(json_file, "w") as f:
-            json.dump({"sym1": {"url": "http://old.com", "description": "Old"}}, f)
-        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
-            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
-                macroMicroSymbolLinkConnect("sym1", "http://new.com", "New")
+
+        mock_driver = MagicMock()
+        mock_driver.title = "中國-逆回購利率(日數據)-7天期 - MacroMicro"
+        mock_uc = MagicMock()
+        mock_uc.Chrome.return_value = mock_driver
+
+        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+                with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
+                    with patch("time.sleep"):
+                        macroMicroSymbolLinkConnect("https://www.macromicro.me/series/5899/cn-dr007")
+
         with open(json_file, "r", encoding="utf-8") as f:
             links = json.load(f)
-        assert links["sym1"]["url"] == "http://new.com"
-        assert links["sym1"]["description"] == "New"
+        assert "cn-dr007" in links
+        assert links["cn-dr007"]["url"] == "https://www.macromicro.me/series/5899/cn-dr007"
+        assert links["cn-dr007"]["description"] == "中國-逆回購利率(日數據)-7天期"
 
     def test_updates_readme(self, tmp_path):
         json_file = str(tmp_path / ".macroMicro_links.json")
         readme_file = str(tmp_path / "README.md")
         readme = tmp_path / "README.md"
         readme.write_text("")
-        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
-            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
-                macroMicroSymbolLinkConnect("sym1", "http://a.com", "Test")
+
+        mock_driver = MagicMock()
+        mock_driver.title = "Test Symbol - MacroMicro"
+        mock_uc = MagicMock()
+        mock_uc.Chrome.return_value = mock_driver
+
+        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+                with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
+                    with patch("time.sleep"):
+                        macroMicroSymbolLinkConnect("https://www.macromicro.me/series/123/test-sym")
+
         content = readme.read_text()
-        assert "`sym1`" in content
-        assert "Test" in content
+        assert "`test-sym`" in content
+        assert "Test Symbol" in content
 
 
 class TestMacroMicroFetcher:

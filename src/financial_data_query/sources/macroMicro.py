@@ -51,3 +51,10 @@ def _update_readme_symbols(links: dict, readme_path: str | None = None) -> None:
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def macroMicroSymbolLinkConnect(symbol: str, url: str, description: str) -> None:
+    links = _load_links()
+    links[symbol] = {"url": url, "description": description}
+    _save_links(links)
+    _update_readme_symbols(links)

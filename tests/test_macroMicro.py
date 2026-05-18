@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
-from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols
+from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols, macroMicroSymbolLinkConnect
 
 
 class TestLoadLinks:
@@ -88,3 +88,45 @@ class TestUpdateReadmeSymbols:
         assert "|--------|------|" in content
         assert "| `sym1` | First |" in content
         assert "| `sym2` | Second |" in content
+
+
+class TestMacroMicroSymbolLinkConnect:
+    def test_create_new_link(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        readme_file = str(tmp_path / "README.md")
+        readme = tmp_path / "README.md"
+        readme.write_text("")
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
+                macroMicroSymbolLinkConnect("sym1", "http://example.com", "Test Symbol")
+        with open(json_file, "r", encoding="utf-8") as f:
+            links = json.load(f)
+        assert links["sym1"]["url"] == "http://example.com"
+        assert links["sym1"]["description"] == "Test Symbol"
+
+    def test_update_existing_link(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        readme_file = str(tmp_path / "README.md")
+        readme = tmp_path / "README.md"
+        readme.write_text("")
+        with open(json_file, "w") as f:
+            json.dump({"sym1": {"url": "http://old.com", "description": "Old"}}, f)
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
+                macroMicroSymbolLinkConnect("sym1", "http://new.com", "New")
+        with open(json_file, "r", encoding="utf-8") as f:
+            links = json.load(f)
+        assert links["sym1"]["url"] == "http://new.com"
+        assert links["sym1"]["description"] == "New"
+
+    def test_updates_readme(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        readme_file = str(tmp_path / "README.md")
+        readme = tmp_path / "README.md"
+        readme.write_text("")
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
+                macroMicroSymbolLinkConnect("sym1", "http://a.com", "Test")
+        content = readme.read_text()
+        assert "`sym1`" in content
+        assert "Test" in content

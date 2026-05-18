@@ -290,21 +290,24 @@ result = query("tw_pmi", ["製造業PMI", "新增訂單數量", "生產數量"])
 - 資料來源：MacroMicro (https://www.macromicro.me)
 - 使用前需先執行 `macroMicroSymbolLinkConnect()` 建立 symbol 映射
 
-**建立 symbol 映射：**
+**建立 symbol 映射（只需輸入 URL，商品代號與描述自動提取）：**
 
 ```python
 from financial_data_query.sources.macroMicro import macroMicroSymbolLinkConnect
 
 macroMicroSymbolLinkConnect(
-    "china-reverse-repo-rate-7-day",
-    "https://www.macromicro.me/series/23233/china-reverse-repo-rate-7-day",
-    "中國7天期逆回購利率"
+    "https://www.macromicro.me/series/23233/china-reverse-repo-rate-7-day"
 )
 ```
 
 **Symbols：**
 
 <!-- MACROMICRO_SYMBOLS_START -->
+| Symbol | 說明 |
+|--------|------|
+| `china-reverse-repo-rate-7-day` | 中國-逆回購利率(日數據)-7天期 |
+| `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) | 數據 |
+| `us-5year-cds` | 美國_5年信用違約交換 |
 <!-- MACROMICRO_SYMBOLS_END -->
 
 ```python
@@ -315,7 +318,7 @@ pip install -e ".[stooq]"
 result = query("macroMicro", "china-reverse-repo-rate-7-day")
 
 # 批量查詢
-result = query("macroMicro", ["sym1", "sym2"])
+result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
 ```
 
 ## 設定

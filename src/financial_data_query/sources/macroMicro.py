@@ -132,3 +132,61 @@ class MacroMicroFetcher(DataSourceFetcher):
             raise FetchError(f"無法存取 MacroMicro 頁面: {url}: {e}") from e
         finally:
             driver.quit()
+
+    def batch_fetch(
+        self,
+        symbols: list[str],
+        start: str | None = None,
+        end: str | None = None,
+        sub_field: str | None = None,
+        frequency: str | None = None,
+    ) -> dict[str, pd.DataFrame]:
+        if not uc:
+            raise FetchError(
+                "undetected-chromedriver 未安裝。"
+                "請執行: pip install financial-data-query[stooq]"
+            )
+
+        links = _load_links()
+        driver = self._create_driver()
+        results = {}
+        try:
+            for symbol in symbols:
+                if symbol not in links:
+                    raise FetchError(
+                        f"找不到 symbol '{symbol}'。請先執行 macroMicroSymbolLinkConnect() 建立映射"
+                    )
+                url = links[symbol]["url"]
+                driver.get(url)
+                time.sleep(3)
+                data_points = driver.execute_script(
+                    "return Highcharts.charts[0].series[0].data.map(function(point) {"
+                    "  return {x: point.x, y: point.y};"
+                    "});"
+                )
+                if not data_points:
+                    raise FetchError(f"頁面中找不到 Highcharts 圖表資料: {url}")
+
+                base_time = pd.Timestamp("1970-01-01", tz="UTC")
+                rows = []
+                for point in data_points:
+                    dt = base_time + pd.Timedelta(milliseconds=point["x"])
+                    dt_twt = dt.tz_convert("Asia/Taipei").tz_localize(None)
+                    rows.append((dt_twt, point["y"]))
+
+                df = pd.DataFrame(rows, columns=["date", "value"])
+                df.set_index("date", inplace=True)
+
+                if start:
+                    df = df[df.index >= pd.Timestamp(start)]
+                if end:
+                    df = df[df.index <= pd.Timestamp(end)]
+
+                results[symbol] = df
+        except FetchError:
+            raise
+        except Exception as e:
+            raise FetchError(f"MacroMicro batch fetch failed: {e}") from e
+        finally:
+            driver.quit()
+        return results

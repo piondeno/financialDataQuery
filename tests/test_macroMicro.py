@@ -178,3 +178,30 @@ class TestMacroMicroFetcher:
         assert "value" in df.columns
         assert len(df) == 2
         assert list(df["value"]) == [1.8, 1.9]
+
+
+class TestMacroMicroBatchFetch:
+    def test_batch_fetch_uses_single_driver(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        with open(json_file, "w") as f:
+            json.dump({
+                "sym1": {"url": "http://a.com", "description": "T"},
+                "sym2": {"url": "http://b.com", "description": "T"}
+            }, f)
+
+        mock_driver = MagicMock()
+        mock_driver.execute_script.return_value = [
+            {"x": 1704153600000, "y": 1.0}
+        ]
+        mock_uc = MagicMock()
+        mock_uc.Chrome.return_value = mock_driver
+
+        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+                with patch("time.sleep"):
+                    fetcher = MacroMicroFetcher()
+                    results = fetcher.batch_fetch(["sym1", "sym2"])
+        assert "sym1" in results
+        assert "sym2" in results
+        assert mock_uc.Chrome.call_count == 1
+        assert mock_driver.get.call_count == 2

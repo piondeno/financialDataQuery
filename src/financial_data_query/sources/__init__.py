@@ -27,5 +27,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.macroMicro import MacroMicroFetcher
+    Registry.register(MacroMicroFetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

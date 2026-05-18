@@ -205,3 +205,9 @@ class TestMacroMicroBatchFetch:
         assert "sym2" in results
         assert mock_uc.Chrome.call_count == 1
         assert mock_driver.get.call_count == 2
+
+
+class TestMacroMicroRegistration:
+    def test_macroMicro_is_registered(self):
+        from financial_data_query.registry import Registry
+        assert Registry.is_registered("macroMicro")

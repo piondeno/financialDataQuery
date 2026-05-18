@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -67,7 +67,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 from financial_data_query import list_sources, register_source, clear_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici']
+list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro']
 
 # 清除記憶體快取
 clear_cache()
@@ -205,6 +205,117 @@ result = query("ici", "mf_equity_total", start="2024-01-01", end="2024-06-30")
 
 # 批量查詢
 result = query("ici", ["mf_total", "etf_total", "combined_total"])
+```
+
+### NCD 台灣經濟指標 (`"tw_eco"`)
+
+- 底層：`undetected_chromedriver` + Selenium 網頁爬蟲
+- 免 API key，需要 Chrome 瀏覽器
+- 資料來源：國家發展委員會景氣偵測系統 (https://index.ndc.gov.tw/n/zh_tw/data/eco#/)
+- 資料範圍：1982-01 至今，每月更新
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `景氣對策信號(燈號)` | 景氣燈號 |
+| `景氣對策信號(分)` | 景氣對策信號綜合分數 |
+| `領先指標綜合指數(點)` | 領先指標綜合指數 |
+| `領先指標不含趨勢指數(點)` | 領先指標不含趨勢 |
+| `同時指標綜合指數(點)` | 同時指標綜合指數 |
+| `同時指標不含趨勢指數(點)` | 同時指標不含趨勢 |
+| `落後指標綜合指數(點)` | 落後指標綜合指數 |
+| `落後指標不含趨勢指數(點)` | 落後指標不含趨勢 |
+
+```python
+# 安裝額外依賴
+pip install -e ".[stooq]"
+
+# 查詢景氣綜合分數
+result = query("tw_eco", "景氣對策信號(分)")
+
+# 指定日期範圍
+result = query("tw_eco", "景氣對策信號(分)", start="2020-01", end="2024-12")
+
+# 批量查詢多個指標
+result = query("tw_eco", ["景氣對策信號(燈號)", "領先指標綜合指數(點)"])
+```
+
+### NCD 台灣 PMI (`"tw_pmi"`)
+
+- 底層：`undetected_chromedriver` + Selenium 網頁爬蟲
+- 免 API key，需要 Chrome 瀏覽器
+- 資料來源：國家發展委員會採購經理人指數 (https://index.ndc.gov.tw/n/zh_tw/data/PMI#/)
+- 資料範圍：2012-07 至今，每月更新
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `製造業PMI` | 製造業 PMI 原始值 |
+| `新增訂單數量` | 新增訂單數量指數 |
+| `生產數量` | 生產數量指數 |
+| `人力僱用數量` | 人力僱用數量指數 |
+| `供應商交貨時間(%)` | 供應商交貨時間百分比 |
+| `存貨(%)` | 存貨百分比 |
+| `客戶存貨(%)` | 客戶存貨百分比 |
+| `原物料價格(%)` | 原物料價格百分比 |
+| `未完成訂單(%)` | 未完成訂單百分比 |
+| `新增出口訂單(%)` | 新增出口訂單百分比 |
+| `進口原物料數量(%)` | 進口原物料數量百分比 |
+| `未來六個月展望(%)` | 未來六個月展望百分比 |
+| `製造業PMI(季調值)(%)` | 製造業 PMI 季調值 |
+| `新增訂單數量(季調值)(%)` | 新增訂單數量季調值 |
+| `生產數量(季調值)(%)` | 生產數量季調值 |
+| `人力僱用數量(季調值)(%)` | 人力僱用數量季調值 |
+
+```python
+# 安裝額外依賴
+pip install -e ".[stooq]"
+
+# 查詢製造業 PMI
+result = query("tw_pmi", "製造業PMI")
+
+# 指定日期範圍
+result = query("tw_pmi", "製造業PMI", start="2020-01", end="2024-12")
+
+# 批量查詢
+result = query("tw_pmi", ["製造業PMI", "新增訂單數量", "生產數量"])
+```
+
+### MacroMicro (`"macroMicro"`)
+
+- 底層:`undetected_chromedriver` + Selenium 網頁爬蟲
+- 免 API key，需要 Chrome 瀏覽器
+- 資料來源：MacroMicro (https://www.macromicro.me)
+- 使用前需先執行 `macroMicroSymbolLinkConnect()` 建立 symbol 映射
+
+**建立 symbol 映射：**
+
+```python
+from financial_data_query.sources.macroMicro import macroMicroSymbolLinkConnect
+
+macroMicroSymbolLinkConnect(
+    "china-reverse-repo-rate-7-day",
+    "https://www.macromicro.me/series/23233/china-reverse-repo-rate-7-day",
+    "中國7天期逆回購利率"
+)
+```
+
+**Symbols：**
+
+<!-- MACROMICRO_SYMBOLS_START -->
+<!-- MACROMICRO_SYMBOLS_END -->
+
+```python
+# 安裝額外依賴
+pip install -e ".[stooq]"
+
+# 查詢
+result = query("macroMicro", "china-reverse-repo-rate-7-day")
+
+# 批量查詢
+result = query("macroMicro", ["sym1", "sym2"])
 ```
 
 ## 設定

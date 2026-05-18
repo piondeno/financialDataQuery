@@ -72,8 +72,9 @@ class FinraMarginFetcher(DataSourceFetcher):
 
         df = pd.read_excel(tmp_path, sheet_name=_SHEET_NAME, engine="openpyxl")
 
-        df["Year-Month"] = pd.to_datetime(
-            df["Year-Month"], format="%Y-%m"
+        df["Year-Month"] = (
+            pd.to_datetime(df["Year-Month"], format="%Y-%m")
+            + pd.offsets.MonthEnd(0)
         )
         df.set_index("Year-Month", inplace=True)
 
@@ -84,7 +85,8 @@ class FinraMarginFetcher(DataSourceFetcher):
         if start:
             df = df[df.index >= pd.Timestamp(start)]
         if end:
-            df = df[df.index <= pd.Timestamp(end)]
+            end_ts = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
+            df = df[df.index <= end_ts]
 
         if df.empty:
             raise FetchError(

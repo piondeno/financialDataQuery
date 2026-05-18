@@ -58,3 +58,77 @@ def macroMicroSymbolLinkConnect(symbol: str, url: str, description: str) -> None
     links[symbol] = {"url": url, "description": description}
     _save_links(links)
     _update_readme_symbols(links)
+
+
+try:
+    import undetected_chromedriver as uc
+    import time
+except ImportError:
+    uc = None
+    time = None
+
+
+class MacroMicroFetcher(DataSourceFetcher):
+    source_name = "macroMicro"
+
+    def _create_driver(self):
+        options = uc.ChromeOptions()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        return uc.Chrome(options=options)
+
+    def fetch(
+        self,
+        symbol: str,
+        start: str | None = None,
+        end: str | None = None,
+        sub_field: str | None = None,
+        frequency: str | None = None,
+    ) -> pd.DataFrame:
+        if not uc:
+            raise FetchError(
+                "undetected-chromedriver 未安裝。"
+                "請執行: pip install financial-data-query[stooq]"
+            )
+
+        links = _load_links()
+        if symbol not in links:
+            raise FetchError(
+                f"找不到 symbol '{symbol}'。請先執行 macroMicroSymbolLinkConnect() 建立映射"
+            )
+
+        url = links[symbol]["url"]
+        driver = self._create_driver()
+        try:
+            driver.get(url)
+            time.sleep(3)
+            data_points = driver.execute_script(
+                "return Highcharts.charts[0].series[0].data.map(function(point) {"
+                "  return {x: point.x, y: point.y};"
+                "});"
+            )
+            if not data_points:
+                raise FetchError("頁面中找不到 Highcharts 圖表資料")
+
+            base_time = pd.Timestamp("1970-01-01", tz="UTC")
+            rows = []
+            for point in data_points:
+                dt = base_time + pd.Timedelta(milliseconds=point["x"])
+                dt_twt = dt.tz_convert("Asia/Taipei").tz_localize(None)
+                rows.append((dt_twt, point["y"]))
+
+            df = pd.DataFrame(rows, columns=["date", "value"])
+            df.set_index("date", inplace=True)
+
+            if start:
+                df = df[df.index >= pd.Timestamp(start)]
+            if end:
+                df = df[df.index <= pd.Timestamp(end)]
+
+            return df
+        except FetchError:
+            raise
+        except Exception as e:
+            raise FetchError(f"無法存取 MacroMicro 頁面: {url}: {e}") from e
+        finally:
+            driver.quit()

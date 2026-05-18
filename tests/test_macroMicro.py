@@ -5,7 +5,8 @@ from unittest.mock import patch, MagicMock
 
 import pandas as pd
 
-from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols, macroMicroSymbolLinkConnect
+from financial_data_query.sources.macroMicro import _load_links, _save_links, _update_readme_symbols, macroMicroSymbolLinkConnect, MacroMicroFetcher
+from financial_data_query.errors import FetchError
 
 
 class TestLoadLinks:
@@ -130,3 +131,50 @@ class TestMacroMicroSymbolLinkConnect:
         content = readme.read_text()
         assert "`sym1`" in content
         assert "Test" in content
+
+
+class TestMacroMicroFetcher:
+    def test_source_name(self):
+        assert MacroMicroFetcher.source_name == "macroMicro"
+
+    def test_fetch_missing_dependency_raises(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        with open(json_file, "w") as f:
+            json.dump({"sym1": {"url": "http://a.com", "description": "T"}}, f)
+        with patch("financial_data_query.sources.macroMicro.uc", None):
+            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+                fetcher = MacroMicroFetcher()
+                with pytest.raises(FetchError, match="undetected-chromedriver"):
+                    fetcher.fetch("sym1")
+
+    def test_fetch_symbol_not_in_links_raises(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        with open(json_file, "w") as f:
+            json.dump({"other": {"url": "http://a.com", "description": "T"}}, f)
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            fetcher = MacroMicroFetcher()
+            with pytest.raises(FetchError, match="找不到 symbol"):
+                fetcher.fetch("sym1")
+
+    def test_fetch_returns_dataframe(self, tmp_path):
+        json_file = str(tmp_path / ".macroMicro_links.json")
+        with open(json_file, "w") as f:
+            json.dump({"sym1": {"url": "http://a.com", "description": "T"}}, f)
+
+        mock_driver = MagicMock()
+        mock_driver.execute_script.return_value = [
+            {"x": 1704153600000, "y": 1.8},
+            {"x": 1704240000000, "y": 1.9}
+        ]
+        mock_uc = MagicMock()
+        mock_uc.Chrome.return_value = mock_driver
+
+        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+                with patch("time.sleep"):
+                    fetcher = MacroMicroFetcher()
+                    df = fetcher.fetch("sym1")
+        assert isinstance(df, pd.DataFrame)
+        assert "value" in df.columns
+        assert len(df) == 2
+        assert list(df["value"]) == [1.8, 1.9]

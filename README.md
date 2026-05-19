@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -67,7 +67,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 from financial_data_query import list_sources, register_source, clear_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro']
+list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro', 'usTreasuryApi']
 
 # 清除記憶體快取
 clear_cache()
@@ -300,13 +300,18 @@ macroMicroSymbolLinkConnect(
 )
 ```
 
+
+```bash
+python -c "from financial_data_query.sources.macroMicro import macroMicroSymbolLinkConnect; macroMicroSymbolLinkConnect('https://www.macromicro.me/series/23233/china-reverse-repo-rate-7-day')"
+```
+
 **Symbols：**
 
 <!-- MACROMICRO_SYMBOLS_START -->
 | Symbol | 說明 |
 |--------|------|
 | `china-reverse-repo-rate-7-day` | 中國-逆回購利率(日數據)-7天期 |
-| `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) | 數據 |
+| `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) |
 | `us-5year-cds` | 美國_5年信用違約交換 |
 <!-- MACROMICRO_SYMBOLS_END -->
 
@@ -319,6 +324,59 @@ result = query("macroMicro", "china-reverse-repo-rate-7-day")
 
 # 批量查詢
 result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
+```
+
+### 美國財政部公債拍賣 (`"usTreasuryApi"`)
+
+- 底層：US Treasury Fiscal Data API
+- 免 API key
+- 資料來源：https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query
+- 資料範圍：1970 年至今，每週更新（拍賣日）
+
+**商品代號：**
+
+| 商品代號 | 債券期限 | 類型 |
+|----------|----------|------|
+| `bill_4w` | 4 週 | T-Bill（國庫券） |
+| `bill_8w` | 8 週 | T-Bill（國庫券） |
+| `bill_13w` | 13 週 | T-Bill（國庫券） |
+| `bill_26w` | 26 週 | T-Bill（國庫券） |
+| `bill_52w` | 52 週 | T-Bill（國庫券） |
+| `note_2y` | 2 年 | T-Note（國庫券） |
+| `note_3y` | 3 年 | T-Note（國庫券） |
+| `note_5y` | 5 年 | T-Note（國庫券） |
+| `note_7y` | 7 年 | T-Note（國庫券） |
+| `note_10y` | 10 年 | T-Note（國庫券） |
+| `bond_30y` | 30 年 | T-Bond（國庫券） |
+| `allBond` | 所有期限 | 回傳日期範圍內的所有拍賣資料 |
+
+**回傳欄位：**
+
+| 欄位 | 說明 |
+|------|------|
+| `security_term` | 債券期限（例：10-Year, 13-Week） |
+| `maturity_date` | 到期日 |
+| `int_rate` | 票面利率（%） |
+| `avg_med_yield` | 平均/中位收益率（%） |
+| `high_yield` | 最高收益率（%） |
+| `low_yield` | 最低收益率（%） |
+| `offering_amount` | 發行金額（美元） |
+| `total_accepted` | 總中标金額（美元） |
+| `bid_to_cover_ratio` | 投標覆蓋率（投標總額/中标總額） |
+| `auction_format` | 拍賣方式（Multi-Price / Price-Based） |
+
+```python
+# 查詢 10 年期公債
+result = query("usTreasuryApi", "note_10y")
+
+# 指定日期範圍
+result = query("usTreasuryApi", "note_10y", start="2024-01-01", end="2024-12-31")
+
+# 查詢所有期限的拍賣資料
+result = query("usTreasuryApi", "allBond", start="2024-01-01", end="2024-12-31")
+
+# 批量查詢多個期限
+result = query("usTreasuryApi", ["note_2y", "note_10y", "bond_30y"])
 ```
 
 ## 設定

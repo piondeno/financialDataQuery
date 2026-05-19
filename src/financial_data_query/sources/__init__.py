@@ -33,5 +33,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.us_treasury import UsTreasuryFetcher
+    Registry.register(UsTreasuryFetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

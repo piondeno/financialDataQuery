@@ -1,0 +1,80 @@
+import io
+
+import pandas as pd
+import requests
+from financial_data_query.base import DataSourceFetcher
+from financial_data_query.errors import FetchError
+
+
+_BASE_URL = "https://www.multpl.com"
+
+_SYMBOL_MAP = {
+    "sp500_ps": "s-p-500-price-to-sales/table/by-quarter",
+    "sp500_div_yield": "s-p-500-dividend-yield/table/by-month",
+    "sp500_pe": "s-p-500-pe-ratio/table/by-month",
+    "shiller_pe": "shiller-pe/table/by-month",
+    "sp500_earn_yield": "s-p-500-earnings-yield/table/by-month",
+    "sp500_price": "s-p-500-historical-prices/table/by-month",
+    "sp500_earn_growth": "s-p-500-earnings-growth/table/by-quarter",
+}
+
+
+class MultplFetcher(DataSourceFetcher):
+    source_name = "multpl"
+
+    def fetch(
+        self,
+        symbol: str,
+        start: str | None = None,
+        end: str | None = None,
+        sub_field: str | None = None,
+        frequency: str | None = None,
+    ) -> pd.DataFrame:
+        if symbol not in _SYMBOL_MAP:
+            raise FetchError(
+                f"Invalid symbol '{symbol}'. "
+                f"Must be one of: {', '.join(sorted(_SYMBOL_MAP.keys()))}"
+            )
+
+        url = f"{_BASE_URL}/{_SYMBOL_MAP[symbol]}"
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            raise FetchError(f"Failed to fetch multpl data for '{symbol}': {e}") from e
+
+        try:
+            tables = pd.read_html(io.StringIO(resp.text), attrs={"id": "datatable"})
+        except Exception as e:
+            raise FetchError(f"Failed to parse HTML table for '{symbol}': {e}") from e
+
+        if not tables:
+            raise FetchError(f"No data table found for '{symbol}'")
+
+        df = tables[0]
+        if df.shape[1] < 2:
+            raise FetchError(f"Table for '{symbol}' has fewer than 2 columns")
+
+        df.columns = ["date", "value"] + list(df.columns[2:])
+        df["date"] = pd.to_datetime(df["date"], format="mixed")
+        df.set_index("date", inplace=True)
+
+        value_str = df["value"].astype(str).str.replace(",", "").str.strip()
+        value_str = value_str.str.replace(r"\u2002", "", regex=True)
+        value_str = value_str.str.replace("†", "", regex=False)
+        df["value"] = pd.to_numeric(value_str.str.rstrip("%"), errors="coerce")
+        df = df.dropna(subset=["value"])
+
+        if start:
+            df = df[df.index >= pd.Timestamp(start)]
+        if end:
+            df = df[df.index <= pd.Timestamp(end)]
+
+        df = df.sort_index()
+
+        if df.empty:
+            raise FetchError(
+                f"No data for '{symbol}' in the given date range"
+            )
+
+        return df

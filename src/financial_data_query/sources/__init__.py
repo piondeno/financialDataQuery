@@ -39,5 +39,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.multpl import MultplFetcher
+    Registry.register(MultplFetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

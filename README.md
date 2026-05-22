@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -67,7 +67,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 from financial_data_query import list_sources, register_source, clear_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro', 'usTreasuryApi']
+list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro', 'usTreasuryApi', 'multpl']
 
 # 清除記憶體快取
 clear_cache()
@@ -377,6 +377,39 @@ result = query("usTreasuryApi", "allBond", start="2024-01-01", end="2024-12-31")
 
 # 批量查詢多個期限
 result = query("usTreasuryApi", ["note_2y", "note_10y", "bond_30y"])
+```
+
+### Multpl (`"multpl"`)
+
+- 底層：`requests` + `pandas.read_html` 網頁爬蟲
+- 免 API key
+- 資料來源：Multpl (https://www.multpl.com)
+- 資料範圍：1870 年至今（Shiller PE），每月/每季更新
+
+**Symbols：**
+
+| Symbol | 說明 | 頻率 |
+|--------|------|------|
+| `sp500_ps` | S&P 500 本銷比 (Price to Sales) | 季 |
+| `sp500_div_yield` | S&P 500 殖利率 (Dividend Yield) | 月 |
+| `sp500_pe` | S&P 500 本益比 (PE Ratio) | 月 |
+| `shiller_pe` | Shiller 本益比 (CAPE) | 月 |
+| `sp500_earn_yield` | S&P 500 盈餘收益率 (Earnings Yield) | 月 |
+| `sp500_price` | S&P 500 歷史價格 (Historical Prices) | 月 |
+| `sp500_earn_growth` | S&P 500 盈餘成長率 (Earnings Growth) | 季 |
+
+```python
+# 查詢 S&P 500 本益比
+result = query("multpl", "sp500_pe")
+
+# 查詢 Shiller PE
+result = query("multpl", "shiller_pe", start="2000-01-01")
+
+# 指定日期範圍
+result = query("multpl", "sp500_div_yield", start="2020-01-01", end="2024-12-31")
+
+# 批量查詢
+result = query("multpl", ["sp500_pe", "shiller_pe", "sp500_div_yield"])
 ```
 
 ## 設定

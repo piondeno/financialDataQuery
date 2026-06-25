@@ -1,5 +1,6 @@
 import pandas as pd
 import io
+import subprocess
 import time
 import os
 import glob
@@ -18,6 +19,20 @@ except ImportError:
     WebDriverWait = None
     Select = None
     EC = None
+
+
+def _get_chrome_version_main() -> int | None:
+    """Auto-detect Chrome browser major version from system."""
+    candidates = ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser"]
+    for cmd in candidates:
+        try:
+            out = subprocess.check_output([cmd, "--version"], stderr=subprocess.DEVNULL, text=True)
+            for part in out.split():
+                if part[0].isdigit():
+                    return int(part.split(".")[0])
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
+            continue
+    return None
 
 _FREQUENCY_TO_VALUE = {
     "1d": "d",
@@ -214,6 +229,9 @@ class StooqFetcher(DataSourceFetcher):
             "safebrowsing.enabled": True,
         }
         options.add_experimental_option("prefs", prefs)
+        version_main = _get_chrome_version_main()
+        if version_main:
+            return uc.Chrome(options=options, version_main=version_main)
         return uc.Chrome(options=options)
 
     def _fetch_with_driver(

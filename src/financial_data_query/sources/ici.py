@@ -65,6 +65,22 @@ _SYMBOL_MAP = {
 
 class IciFetcher(DataSourceFetcher):
     source_name = "ici"
+    _excel_cache: dict[str, pd.DataFrame] = {}
+
+    def _get_parsed_df(self, prefix: str) -> pd.DataFrame:
+        if prefix not in self._excel_cache:
+            tmp_path = self._download_excel(prefix)
+            try:
+                import xlrd  # noqa: F401
+            except ImportError:
+                raise FetchError(
+                    "xlrd is required for ici source. "
+                    "Install it with: pip install financial-data-query[ici]"
+                )
+            sheet_name = _SHEET_MAP[prefix]
+            df = pd.read_excel(tmp_path, sheet_name=sheet_name, header=None)
+            self._excel_cache[prefix] = df
+        return self._excel_cache[prefix]
 
     def fetch(
         self,
@@ -81,18 +97,31 @@ class IciFetcher(DataSourceFetcher):
             )
 
         prefix, column_name = _SYMBOL_MAP[symbol]
-        tmp_path = None
-        try:
-            tmp_path = self._download_excel(prefix)
-            df = self._parse_excel(tmp_path, prefix, column_name, start, end)
-            return df
-        except FetchError:
-            raise
-        except Exception as e:
-            raise FetchError(f"ICI fetch failed for '{symbol}': {e}") from e
-        finally:
-            if tmp_path:
-                self._cleanup_file(tmp_path)
+        df_raw = self._get_parsed_df(prefix)
+        merged_columns = self._merge_headers(df_raw)
+        date_col_values = df_raw.iloc[7:, 0]
+        cleaned_dates = [
+            str(v).strip() if pd.notna(v) else v for v in date_col_values
+        ]
+        dates = pd.to_datetime(cleaned_dates, format="%m/%d/%Y", errors="coerce")
+        data_rows = df_raw.iloc[7:]
+        col_idx = merged_columns.get(column_name)
+        if col_idx is None:
+            raise FetchError(
+                f"Column '{column_name}' not found. Available: {list(merged_columns.keys())}"
+            )
+        values = pd.to_numeric(data_rows.iloc[:, col_idx], errors="coerce")
+        result = pd.DataFrame({"value": values.values}, index=dates.values)
+        result = result[~result.index.isna() & ~result["value"].isna()]
+        if start:
+            result = result[result.index >= pd.Timestamp(start)]
+        if end:
+            result = result[result.index <= pd.Timestamp(end)]
+        if result.empty:
+            raise FetchError(
+                f"No data for column '{column_name}' in the given date range"
+            )
+        return result
 
     def _download_excel(self, prefix: str) -> str:
         url = _URL_MAP[prefix]
@@ -103,56 +132,6 @@ class IciFetcher(DataSourceFetcher):
         except Exception as e:
             raise FetchError(f"Failed to download ICI {prefix} Excel file: {e}") from e
         return tmp_path
-
-    def _parse_excel(
-        self,
-        tmp_path: str,
-        prefix: str,
-        column_name: str,
-        start: str | None,
-        end: str | None,
-    ) -> pd.DataFrame:
-        try:
-            import xlrd  # noqa: F401
-        except ImportError:
-            raise FetchError(
-                "xlrd is required for ici source. "
-                "Install it with: pip install financial-data-query[ici]"
-            )
-
-        sheet_name = _SHEET_MAP[prefix]
-        df = pd.read_excel(tmp_path, sheet_name=sheet_name, header=None)
-
-        merged_columns = self._merge_headers(df)
-        date_col_values = df.iloc[7:, 0]
-        cleaned_dates = [
-            str(v).strip() if pd.notna(v) else v for v in date_col_values
-        ]
-
-        dates = pd.to_datetime(cleaned_dates, format="%m/%d/%Y", errors="coerce")
-        data_rows = df.iloc[7:]
-
-        col_idx = merged_columns.get(column_name)
-        if col_idx is None:
-            raise FetchError(
-                f"Column '{column_name}' not found. Available: {list(merged_columns.keys())}"
-            )
-
-        values = pd.to_numeric(data_rows.iloc[:, col_idx], errors="coerce")
-        result = pd.DataFrame({"value": values.values}, index=dates.values)
-        result = result[~result.index.isna() & ~result["value"].isna()]
-
-        if start:
-            result = result[result.index >= pd.Timestamp(start)]
-        if end:
-            result = result[result.index <= pd.Timestamp(end)]
-
-        if result.empty:
-            raise FetchError(
-                f"No data for column '{column_name}' in the given date range"
-            )
-
-        return result
 
     @staticmethod
     def _merge_headers(df: pd.DataFrame) -> dict[str, int]:

@@ -147,7 +147,7 @@ class TestNdcFetchFlow:
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        assert "擴散指數" in result.columns
+        assert "value" in result.columns
         mock_driver.quit.assert_called_once()
 
     def test_fetch_with_date_range(self, fetcher):

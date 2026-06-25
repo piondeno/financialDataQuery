@@ -50,14 +50,3 @@ df = query("fred", "CPIAUCSL", output="dataframe")
 ## 回傳欄位
 
 `date`, `value`
-
-## 常見系列代號
-
-| 代號 | 說明 |
-|------|------|
-| `CPIAUCSL` | 消費者物價指數（-all urban consumers） |
-| `GDP` | 國內生產毛額 |
-| `UNRATE` | 失業率 |
-| `FEDFUNDS` | 聯邦基金利率 |
-| `INDPRO` | 工業生產指數 |
-| `T10YIEND` | 10年期公債收益率 |

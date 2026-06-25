@@ -1,13 +1,10 @@
 import requests
 import pandas as pd
+from datetime import datetime
 from financial_data_query.base import DataSourceFetcher
 from financial_data_query.errors import FetchError
 
-
-_API_BASE_URL = (
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/"
-    "accounting/od/auctions_query"
-)
+_API_BASE_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query"
 
 # 商品代號對應至 security_term 的值
 _SYMBOL_MAP = {
@@ -23,6 +20,9 @@ _SYMBOL_MAP = {
     "note_10y": "10-Year",
     "bond_30y": "30-Year",
 }
+
+# 到期債務的 symbol
+_DEBT_MATURITY_SYMBOL = "debtMaturity"
 
 # API 欄位名稱 → 輸出欄位名稱的映射
 _COLUMN_RENAME_MAP = {
@@ -50,6 +50,12 @@ _PAGE_SIZE = 10000
 # 模組層快取：解析後的 DataFrame，避免每次都重新下載
 _cached_df: pd.DataFrame | None = None
 
+# 模組層快取：原始記錄，用於到期債務計算
+_cached_raw_records: list | None = None
+
+# 到期債務計算的快取
+_debt_maturity_cache: dict[tuple[str, str], tuple[datetime, pd.DataFrame]] | None = None
+
 
 class UsTreasuryFetcher(DataSourceFetcher):
     """美國財政部公債拍賣資料來源。"""
@@ -64,13 +70,35 @@ class UsTreasuryFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
-        # 特殊處理：allBond 回傳所有債券
+        if symbol == _DEBT_MATURITY_SYMBOL:
+            if not end:
+                raise FetchError(
+                    f"使用 '{_DEBT_MATURITY_SYMBOL}' 時，必須指定 end 參數（到期截止日期）"
+                )
+            try:
+                end_date = datetime.strptime(end, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                raise FetchError(
+                    f"end 參數格式錯誤，必須為 YYYY-MM-DD，收到: '{end}'"
+                )
+            today = datetime.now()
+            if end_date <= today:
+                raise FetchError(
+                    f"end 必須晚於今日（{today.strftime('%Y-%m-%d')}），收到: {end}"
+                )
+            start_date = today if not start else datetime.strptime(start, "%Y-%m-%d")
+            if end_date <= start_date:
+                raise FetchError(
+                    f"end 必須晚於 start（{start_date.strftime('%Y-%m-%d')}），收到: {end}"
+                )
+            return self._calculate_debt_maturity(start_date, end_date)
+
         if symbol == "allBond":
             security_term = None
         elif symbol in _SYMBOL_MAP:
             security_term = _SYMBOL_MAP[symbol]
         else:
-            valid_symbols = list(_SYMBOL_MAP.keys()) + ["allBond"]
+            valid_symbols = list(_SYMBOL_MAP.keys()) + [_DEBT_MATURITY_SYMBOL] + ["allBond"]
             raise FetchError(
                 f"無效的商品代號 '{symbol}'。"
                 f"有效的代號為: {', '.join(valid_symbols)}"
@@ -78,11 +106,9 @@ class UsTreasuryFetcher(DataSourceFetcher):
 
         df = self._get_full_dataframe()
 
-        # 客戶端過濾：依債券期限篩選
         if security_term:
             df = df[df["security_term"] == security_term]
 
-        # 客戶端過濾：依日期範圍篩選
         if start:
             df = df[df.index >= pd.Timestamp(start)]
         if end:
@@ -140,6 +166,109 @@ class UsTreasuryFetcher(DataSourceFetcher):
             page_number += 1
 
         return all_records
+
+    def _get_raw_records(self) -> list:
+        """取得原始記錄（使用模組層快取）。"""
+        global _cached_raw_records
+        if _cached_raw_records is not None:
+            return _cached_raw_records
+
+        _cached_raw_records = self._fetch_all_pages()
+        return _cached_raw_records
+
+    def _calculate_debt_maturity(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
+        """計算指定日期範圍內到期的債務規模，依債券類型分類。
+
+        Args:
+            start_date: 起始日期（預設今天）。
+            end_date: 截止日期。
+
+        Returns:
+            DataFrame 包含各債券類型的到期債務總額。
+        """
+        global _debt_maturity_cache
+        if _debt_maturity_cache is None:
+            _debt_maturity_cache = {}
+
+        cache_key = (start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+        if cache_key in _debt_maturity_cache:
+            cache_date, cache_df = _debt_maturity_cache[cache_key]
+            if (datetime.now() - cache_date).days < 1:
+                return cache_df.copy()
+
+        records = self._get_raw_records()
+
+        maturing_records = []
+        for r in records:
+            mat_str = r.get("maturity_date", "")
+            out_str = r.get("currently_outstanding")
+
+            try:
+                mat_date = datetime.strptime(mat_str, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                continue
+
+            if not (start_date <= mat_date <= end_date):
+                continue
+
+            if not out_str or out_str == "null":
+                offering_amt = r.get("offering_amt", "")
+                if not offering_amt or offering_amt == "null":
+                    continue
+                out_str = offering_amt
+
+            maturing_records.append(r)
+
+        if not maturing_records:
+            raise FetchError(
+                f"在日期範圍「{start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}」內找不到到期的債務資料"
+            )
+
+        from collections import defaultdict
+
+        cusip_groups = defaultdict(list)
+        for r in maturing_records:
+            cusip_groups[r.get("cusip")].append(r)
+
+        latest_per_cusip = []
+        for cusip, rs in cusip_groups.items():
+            rs.sort(key=lambda x: x.get("issue_date", ""), reverse=True)
+            latest_per_cusip.append(rs[0])
+
+        result = {
+            "T_Bills": 0,
+            "T_Notes": 0,
+            "T_Bonds": 0,
+            "TIPS": 0,
+            "FRNs": 0,
+        }
+
+        for r in latest_per_cusip:
+            out_str = r.get("currently_outstanding", "")
+            if not out_str or out_str == "null":
+                out_str = r.get("offering_amt", "0")
+            out_val = float(out_str or 0)
+            inflation = r.get("inflation_index_security", "No")
+            floating = r.get("floating_rate", "No")
+            sec_type = r.get("security_type", "")
+
+            if inflation == "Yes":
+                result["TIPS"] += out_val
+            elif floating == "Yes":
+                result["FRNs"] += out_val
+            elif sec_type == "Bill":
+                result["T_Bills"] += out_val
+            elif sec_type == "Note":
+                result["T_Notes"] += out_val
+            elif sec_type == "Bond":
+                result["T_Bonds"] += out_val
+
+        df = pd.DataFrame([result], index=[pd.Timestamp(start_date)])
+        df.attrs["start_date"] = start_date.strftime("%Y-%m-%d")
+        df.attrs["end_date"] = end_date.strftime("%Y-%m-%d")
+
+        _debt_maturity_cache[cache_key] = (datetime.now(), df)
+        return df
 
     @staticmethod
     def _parse_records(records):

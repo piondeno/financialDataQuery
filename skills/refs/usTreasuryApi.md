@@ -5,9 +5,6 @@ US Treasury Fiscal Data API 公債拍賣數據。免 API key，免瀏覽器。
 資料來源: https://api.fiscaldata.treasury.gov
 資料範圍: 1970 年至今，每週更新（拍賣日）
 
-## 安裝
-
-基本安裝已包含，無需額外依賴。
 
 ## Symbols
 
@@ -25,6 +22,19 @@ US Treasury Fiscal Data API 公債拍賣數據。免 API key，免瀏覽器。
 | `note_10y` | 10 年 | T-Note |
 | `bond_30y` | 30 年 | T-Bond |
 | `allBond` | 所有期限 | 回傳日期範圍內的所有拍賣資料 |
+| `debtMaturity` | 到期債務分析 | 配合 `start`（預設今天）和 `end`（必填）指定到期日期範圍 |
+
+## 到期分析回傳欄位
+
+| 欄位 | 說明 |
+|------|------|
+| `T_Bills` | T-Bills（國庫券）到期金額 |
+| `T_Notes` | T-Notes（中期國庫券）到期金額 |
+| `T_Bonds` | T-Bonds（長期國庫債券）到期金額 |
+| `TIPS` | TIPS（通膨指數化債券）到期金額 |
+| `FRNs` | FRNs（浮動利率債券）到期金額 |
+
+金額單位：美元。回傳為單行 DataFrame。
 
 ## 回傳欄位
 
@@ -47,8 +57,7 @@ US Treasury Fiscal Data API 公債拍賣數據。免 API key，免瀏覽器。
 |------|------|
 | `start` / `end` | 日期 `YYYY-MM-DD`（按拍賣日篩選） |
 | `sub_field` | 指定上述任一欄位名稱 |
-
-`frequency` 不適用。
+| `end` | 僅 `debtMaturity` 使用，到期截止日期（必填） |
 
 ## 使用範例
 
@@ -63,6 +72,9 @@ result = query("usTreasuryApi", "note_10y", start="2024-01-01", end="2024-12-31"
 
 # 查詢所有期限的拍賣資料
 result = query("usTreasuryApi", "allBond", start="2024-01-01", end="2024-12-31")
+
+# 查詢 24 個月內到期的債務
+result = query("usTreasuryApi", "debtMaturity", end="2026-12-31")
 
 # 批量查詢多個期限
 result = query("usTreasuryApi", ["note_2y", "note_10y", "bond_30y"])

@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"`, `"moea"`, `"zillow"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -67,7 +67,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 from financial_data_query import list_sources, register_source, clear_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['yahoo', 'fred', 'stooq', 'finra_margin', 'ici', 'tw_eco', 'tw_pmi', 'macroMicro', 'usTreasuryApi', 'multpl']
+list_sources()  # ['akshare', 'finra_margin', 'fred', 'ici', 'macroMicro', 'moea', 'multpl', 'stooq', 'tw_eco', 'tw_pmi', 'usTreasuryApi', 'yahoo', 'zillow']
 
 # 清除記憶體快取
 clear_cache()
@@ -92,6 +92,54 @@ result = query("yahoo", "AAPL", frequency="daily")
 
 ```python
 result = query("fred", "CPIAUCSL")
+```
+
+### AkShare (`"akshare"`)
+
+- 底層：`akshare` Python library
+- 免 API key，無需瀏覽器
+- 資料範圍：1990s 至今（A股），2014 至今（BDI/PMI）
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `bdi` | BDI 波罗的海干散货指數 |
+| A股代號（如 `"000001"`, `"600519"`） | A股歷史行情 |
+| `wci` | Drewry 世界集装箱指數 WCI (2016-至今) |
+| `china_manufacturing_pmi` | 財新中國製造業 PMI (2014-至今) |
+| `china_services_pmi` | 財新中國服務業 PMI (2014-至今) |
+| `euro_manufacturing_pmi` | 歐元區製造業 PMI 初值 (2008-至今) |
+| `usa_ism_pmi` | 美國 ISM 製造業 PMI (1970-至今) |
+
+```python
+# 安裝額外依賴
+pip install -e ".[akshare]"
+
+# 查詢 BDI 指數週線
+result = query("akshare", "bdi", frequency="weekly")
+
+# 查詢 A股收盤價
+result = query("akshare", "600519", sub_field="close")
+
+# 查詢 Drewry WCI 世界集装箱指數
+result = query("akshare", "wci")
+
+# 查詢財新中國製造業 PMI（2014-至今）
+result = query("akshare", "china_manufacturing_pmi")
+
+# 查詢財新中國服務業 PMI（2014-至今）
+result = query("akshare", "china_services_pmi")
+
+# 批次查詢所有 PMI
+query("akshare", ["china_manufacturing_pmi", "china_services_pmi", 
+                  "euro_manufacturing_pmi", "usa_ism_pmi"])
+
+# 指定日期範圍
+result = query("akshare", "000001", start="2024-01-01", end="2024-06-30")
+
+# 批量查詢
+result = query("akshare", ["000001", "600519"])
 ```
 
 ### Stooq (`"stooq"`)
@@ -310,9 +358,13 @@ python -c "from financial_data_query.sources.macroMicro import macroMicroSymbolL
 <!-- MACROMICRO_SYMBOLS_START -->
 | Symbol | 說明 |
 |--------|------|
-| `china-reverse-repo-rate-7-day` | 中國-逆回購利率(日數據)-7天期 |
-| `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) |
+| `china-reverse-repo-rate-7-day` | 中國-逆回購利率(日數據)-7天期 | 數據 |
+| `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) | 數據 |
+| `ism-manufacturing-customersinventories` | 美國-ISM製造業指數[PMI]-客戶存貨 | 數據 |
+| `ism-manufacturing-neworders` | 美國-ISM製造業指數[PMI]-新訂單 | 數據 |
+| `ism-manufacturing-supplierdeliveries` | 美國-ISM製造業指數[PMI]-供應商交貨 | 數據 |
 | `us-5year-cds` | 美國_5年信用違約交換 |
+| `us-new-tenant-rent-index` | US - New Tenant Rent Index | Series |
 <!-- MACROMICRO_SYMBOLS_END -->
 
 ```python
@@ -349,6 +401,9 @@ result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
 | `note_10y` | 10 年 | T-Note（國庫券） |
 | `bond_30y` | 30 年 | T-Bond（國庫券） |
 | `allBond` | 所有期限 | 回傳日期範圍內的所有拍賣資料 |
+| `debtMaturity` | 到期債務分析 | 配合 `start`（預設今天）和 `end` 指定到期日期範圍 |
+
+**到期分析回傳欄位：** `T_Bills`, `T_Notes`, `T_Bonds`, `TIPS`, `FRNs`（單位：美元，單行 DataFrame）
 
 **回傳欄位：**
 
@@ -374,6 +429,9 @@ result = query("usTreasuryApi", "note_10y", start="2024-01-01", end="2024-12-31"
 
 # 查詢所有期限的拍賣資料
 result = query("usTreasuryApi", "allBond", start="2024-01-01", end="2024-12-31")
+
+# 查詢 24 個月內到期的債務
+result = query("usTreasuryApi", "debtMaturity", end="2026-12-31")
 
 # 批量查詢多個期限
 result = query("usTreasuryApi", ["note_2y", "note_10y", "bond_30y"])
@@ -411,6 +469,93 @@ result = query("multpl", "sp500_div_yield", start="2020-01-01", end="2024-12-31"
 # 批量查詢
 result = query("multpl", ["sp500_pe", "shiller_pe", "sp500_div_yield"])
 ```
+
+### MOEA 台灣外銷訂單 (`"moea"`)
+
+- 底層：`selenium` + `webdriver-manager` 網頁爬蟲（自動管理 ChromeDriver）
+- 免 API key，需要 Chrome 瀏覽器
+- 資料來源：經濟部出口貿易統計 (https://service.moea.gov.tw/EE520/investigate/InvestigateBA.aspx)
+- 資料範圍：1984-09 至今，每月更新
+
+**商品代號：**
+
+| 類別 | 商品代號 |
+|------|----------|
+| 化工類 | `化學品`, `塑膠、橡膠及其製品` |
+| 紡織類 | `紡織品` |
+| 金屬類 | `基本金屬及其製品` |
+| 電子類 | `電子產品` |
+| 機械類 | `機械`, `電機產品` |
+| 資訊通信 | `資訊與通信產品` |
+| 運具類 | `運輸工具及其設備` |
+| 其他 | `光學器材`, `礦產品`, `其他` |
+
+**地區：** `美國`, `日本`, `中國大陸及香港`, `東協`, `歐洲`, `其他地區`
+
+```python
+# 安裝額外依賴
+pip install webdriver-manager selenium
+
+# 查詢單一商品所有地區（回傳每個地區的數值）
+result = query("moea", "資訊與通信產品")
+# {"資訊與通信產品": [{"date": "1984-09-30", "美國": 43.0, "日本": 9.0, ...}, ...]}
+
+# 指定日期範圍
+result = query("moea", "化學品", start="2024-01-01", end="2024-12-31")
+
+# 批量查詢多個商品（共用單一瀏覽器 session）
+result = query("moea", ["化學品", "電子產品", "機械"])
+```
+
+**回傳格式：** `date` (月終), 各地區欄位 (`美國`, `日本`, `中國大陸及香港`, `東協`, `歐洲`, `其他地區`)
+
+**注意事項：**
+- Symbol 只需商品代號，會自動包含所有 6 個地區
+- 每次查詢抓取全量資料後在客戶端篩選
+- **建議使用批量查詢以節省瀏覽器開關時間**
+
+### Zillow (`"zillow"`)
+
+- 底層：`requests` 下載 Zillow Research CSV
+- 免 API key
+- 資料來源：Zillow Research (https://www.zillow.com/research/)
+- 資料地區：全美 (US)、紐約 (NY)、洛杉磯 (LA)
+- 資料頻率：月
+
+**Symbols：**
+
+| Symbol | 說明 | 地區 |
+|--------|------|------|
+| `ZHVI` | Zillow 房價指數 (Home Value Index) | US, NY, LA |
+| `ZHVF` | Zillow 房價預測 (Home Value Forecast) | US, NY, LA |
+| `ZORI` | Zillow 租金指數 (Rental Index) | US, NY, LA |
+| `ZORF` | Zillow 租金預測 (Rental Forecast) | US 僅全國 |
+| `FSIT` | 待售房屋存貨量 (For-Sale Inventory) | US, NY, LA |
+| `SALCNT` | 房屋銷售量 (Sales Count) | US, NY, LA |
+| `MRKT` | 市場溫度指數 (Market Temperature Index) | US, NY, LA |
+| `NCSC` | 新建房屋銷售量 (New Construction Sales) | US, NY, LA |
+| `NHIN` | 購屋所需年收入 (New Homeowner Income Needed) | US, NY, LA |
+
+```python
+# 查詢全美租金指數
+result = query("zillow", "ZORI")
+
+# 查詢紐約房價指數
+result = query("zillow", "ZHVI", sub_field="NY")
+
+# 查詢洛杉磯市場溫度指數
+result = query("zillow", "MRKT", sub_field="LA")
+
+# 指定日期範圍
+result = query("zillow", "ZHVI", sub_field="NY", start="2020-01-01", end="2024-12-31")
+
+# 批量查詢
+result = query("zillow", ["ZHVI", "ZORI", "FSIT"], sub_field="NY")
+```
+
+**注意事項：**
+- `sub_field` 預設回傳全部三個地區，指定 `US`、`NY`、`LA` 可篩選單一地區
+- `ZORF` 僅有全國數據，無地區數據
 
 ## 設定
 

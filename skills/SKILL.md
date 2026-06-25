@@ -1,3 +1,8 @@
+---
+name: financial-data-query
+description: 統一金融資料查詢 API，支援 Yahoo Finance、FRED、Stooq、AkShare、MOEA、FINRA、ICI、台灣 NCD（tw_eco/tw_pmi）、MacroMicro、Zillow、OptionCharts 等多個資料來源
+---
+
 # Financial Data Query — 使用方式
 
 統一金融資料查詢 API。所有資料來源共用同一個 `query()` 函數。
@@ -52,41 +57,10 @@ except DataSourceError as e:
 | `ConfigError` | API key 或設定缺失 |
 | `FetchError` | 網路請求失敗或 API 錯誤 |
 
-## 安裝與設定
-
-```bash
-# 基本安裝
-pip install -e .
-
-# Stooq / tw_eco / tw_pmi / macroMicro（需要 Chrome 瀏覽器）
-pip install -e ".[stooq]"
-
-# FINRA Margin
-pip install -e ".[finra_margin]"
-
-# ICI Fund Flows
-pip install -e ".[ici]"
-```
-
-FRED 需要 API key，在專案根目錄建立 `.env`：
-```
-FRED_API_KEY=your_key_here
-```
-
-## 資料來源速查
-
-| Source | 說明 | 需 API Key | 需瀏覽器 | 詳細文件 |
-|--------|------|:----------:|:-------:|----------|
-| `yahoo` | Yahoo Finance 股價 | 否 | 否 | [refs/yahoo.md](refs/yahoo.md) |
-| `fred` | FRED 經濟指標 | 是 | 否 | [refs/fred.md](refs/fred.md) |
-| `stooq` | Stooq 歷史股價 | 否 | 是 | [refs/stooq.md](refs/stooq.md) |
-| `finra_margin` | FINRA 融資統計 | 否 | 否 | [refs/finra_margin.md](refs/finra_margin.md) |
-| `ici` | ICI 基金資金流量 | 否 | 否 | [refs/ici.md](refs/ici.md) |
-| `tw_eco` | 台灣 NCD 經濟指標 | 否 | 是 | [refs/tw_eco.md](refs/tw_eco.md) |
-| `tw_pmi` | 台灣 NCD PMI | 否 | 是 | [refs/tw_pmi.md](refs/tw_pmi.md) |
-| `macroMicro` | MacroMicro 經濟數據 | 否 | 是 | [refs/macroMicro.md](refs/macroMicro.md) |
-| `usTreasuryApi` | 美國財政部公債拍賣 | 否 | 否 | [refs/usTreasuryApi.md](refs/usTreasuryApi.md) |
-| `multpl` | Multpl S&P 500 估值指標 | 否 | 否 | [refs/multpl.md](refs/multpl.md) |
+## 資料源與商品代號 查詢
+<HARD-GATE>
+使用文件， **refs/symbols_reference.md**，進行資料源與商品代號查詢
+</HARD-GATE>
 
 ## 使用模式
 
@@ -95,18 +69,3 @@ FRED_API_KEY=your_key_here
 3. **呼叫 `query()`** — 單筆或批量查詢
 4. **處理結果** — JSON 格式適合 AI 模型，DataFrame 適合進一步分析
 
-## 擴充自訂資料來源
-
-```python
-from financial_data_query import register_source
-from financial_data_query.base import DataSourceFetcher
-import pandas as pd
-
-class MyFetcher(DataSourceFetcher):
-    source_name = "my_source"
-
-    def fetch(self, symbol, start=None, end=None, sub_field=None, frequency=None) -> pd.DataFrame:
-        return pd.DataFrame(...)
-
-register_source(MyFetcher)
-```

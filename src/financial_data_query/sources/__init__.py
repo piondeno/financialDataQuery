@@ -16,6 +16,12 @@ except ImportError:
     pass
 
 try:
+    from financial_data_query.sources.moeab import MoeaFetcher
+    Registry.register(MoeaFetcher)
+except ImportError:
+    pass
+
+try:
     from financial_data_query.sources.finra_margin import FinraMarginFetcher
     Registry.register(FinraMarginFetcher)
 except ImportError:
@@ -42,6 +48,24 @@ except ImportError:
 try:
     from financial_data_query.sources.multpl import MultplFetcher
     Registry.register(MultplFetcher)
+except ImportError:
+    pass
+
+try:
+    from financial_data_query.sources.akshare import AkShareFetcher
+    Registry.register(AkShareFetcher)
+except ImportError:
+    pass
+
+try:
+    from financial_data_query.sources.zillow import ZillowFetcher
+    Registry.register(ZillowFetcher)
+except ImportError:
+    pass
+
+try:
+    from financial_data_query.sources.optioncharts import OptionchartsFetcher
+    Registry.register(OptionchartsFetcher)
 except ImportError:
     pass
 

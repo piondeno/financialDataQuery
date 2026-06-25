@@ -82,7 +82,11 @@ def macroMicroSymbolLinkConnect(url: str) -> None:
         options = uc.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        driver = uc.Chrome(options=options)
+        version_main = _get_chrome_version_main()
+        if version_main:
+            driver = uc.Chrome(options=options, version_main=version_main)
+        else:
+            driver = uc.Chrome(options=options)
         driver.get(url)
         time.sleep(3)
         page_title = driver.title
@@ -104,9 +108,26 @@ def macroMicroSymbolLinkConnect(url: str) -> None:
 try:
     import undetected_chromedriver as uc
     import time
+    import subprocess
 except ImportError:
     uc = None
     time = None
+    subprocess = None
+
+
+def _get_chrome_version_main() -> int | None:
+    """Auto-detect Chrome browser major version from system."""
+    candidates = ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser"]
+    for cmd in candidates:
+        try:
+            out = subprocess.check_output([cmd, "--version"], stderr=subprocess.DEVNULL, text=True)
+            # e.g. "Google Chrome 148.0.7778.96"
+            for part in out.split():
+                if part[0].isdigit():
+                    return int(part.split(".")[0])
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
+            continue
+    return None
 
 
 class MacroMicroFetcher(DataSourceFetcher):
@@ -116,6 +137,9 @@ class MacroMicroFetcher(DataSourceFetcher):
         options = uc.ChromeOptions()
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        version_main = _get_chrome_version_main()
+        if version_main:
+            return uc.Chrome(options=options, version_main=version_main)
         return uc.Chrome(options=options)
 
     def fetch(

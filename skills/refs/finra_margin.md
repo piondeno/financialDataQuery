@@ -5,12 +5,6 @@ FINRA 客戶融資帳戶統計數據。直接下載 Excel 檔案解析，免 API
 資料來源: https://www.finra.org/margin-statistics
 資料範圍: 1997-01 至今，每月更新
 
-## 安裝
-
-```bash
-pip install -e ".[finra_margin]"
-```
-
 ## Symbols
 
 | Symbol | 說明 |

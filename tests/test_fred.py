@@ -29,8 +29,8 @@ class TestFredFetcher:
     def test_fetch_returns_dataframe(self, fetcher):
         mock_response = {
             "observations": [
-                ["2024-01-01", "27000.0"],
-                ["2024-04-01", "27500.0"],
+                {"date": "2024-01-01", "value": "27000.0"},
+                {"date": "2024-04-01", "value": "27500.0"},
             ]
         }
         with mock.patch("financial_data_query.sources.fred.get_config", return_value="test_key"):
@@ -43,7 +43,7 @@ class TestFredFetcher:
         assert isinstance(result.index, pd.DatetimeIndex)
 
     def test_fetch_with_date_range(self, fetcher):
-        mock_response = {"observations": [["2024-06-01", "100.0"]]}
+        mock_response = {"observations": [{"date": "2024-06-01", "value": "100.0"}]}
         with mock.patch("financial_data_query.sources.fred.get_config", return_value="test_key"):
             with mock.patch("financial_data_query.sources.fred.requests.get") as mock_get:
                 mock_get.return_value.status_code = 200
@@ -51,12 +51,13 @@ class TestFredFetcher:
                 fetcher.fetch("GDP", start="2024-06-01", end="2024-12-31")
                 call_params = mock_get.call_args[1]["params"]
                 assert call_params["sort_order"] == "asc"
-                assert call_params["start_date"] == "2024-06-01"
-                assert call_params["end_date"] == "2024-12-31"
+                assert call_params["observation_start"] == "2024-06-01"
+                assert call_params["observation_end"] == "2024-12-31"
 
     def test_fetch_api_error_raises(self, fetcher):
         with mock.patch("financial_data_query.sources.fred.get_config", return_value="test_key"):
             with mock.patch("financial_data_query.sources.fred.requests.get") as mock_get:
                 mock_get.return_value.status_code = 403
+                mock_get.return_value.text = "Forbidden"
                 with pytest.raises(FetchError):
                     fetcher.fetch("GDP")

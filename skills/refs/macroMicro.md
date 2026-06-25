@@ -30,7 +30,15 @@ python -c "from financial_data_query.sources.macroMicro import macroMicroSymbolL
 
 ## Symbols
 
-已註冊的 symbol 可查閱專案根目錄的 `.macroMicro_links.json` 或 README.md 中的 MacroMicro 章節。
+| Symbol | 說明 | 資料範圍 |
+|--------|------|----------|
+| `us-5year-cds` | 美國 5 年信用違約交換 (CDS) | — |
+| `cn-dr007` | 中國銀行間債券質押式回購利率 DR007（7 天期） | — |
+| `china-reverse-repo-rate-7-day` | 中國逆回購利率日數據 7 天期 | — |
+| `ism-manufacturing-supplierdeliveries` | ISM 製造業 PMI - 供應商交貨指數 | 1985-01 ~ 至今（624 筆） |
+| `ism-manufacturing-neworders` | ISM 製造業 PMI - 新訂單指數 | 1948-01 ~ 至今（159 筆） |
+| `ism-manufacturing-customersinventories` | ISM 製造業 PMI - 客戶存貨指數 | 1997-01 ~ 至今（61 筆） |
+| `us-new-tenant-rent-index` | 美國新租客租金指數 | 2005-01 ~ 2025-07（31 筆，季頻） |
 
 ## 參數
 
@@ -47,6 +55,16 @@ from financial_data_query import query
 
 # 查詢已註冊的指標
 result = query("macroMicro", "china-reverse-repo-rate-7-day")
+
+# ISM 製造業 PMI - 新訂單指數
+df = query("macroMicro", "ism-manufacturing-neworders", output="dataframe")
+#           value
+# date            
+# 1948-01-01  53.3
+# 1948-07-01  50.4
+
+# ISM 製造業 PMI - 客戶存貨指數
+df = query("macroMicro", "ism-manufacturing-customersinventories", output="dataframe")
 
 # 指定日期範圍
 result = query("macroMicro", "cn-dr007", start="2024-01-01", end="2024-12-31")

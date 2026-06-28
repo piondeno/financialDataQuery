@@ -20,6 +20,7 @@ class FinraMarginFetcher(DataSourceFetcher):
     source_name = "finra_margin"
     _full_df_cache: pd.DataFrame | None = None
     _tmp_path_cache: str | None = None
+    _fetches_full_data = True
 
     def _get_full_df(self) -> pd.DataFrame:
         if self._full_df_cache is not None:
@@ -66,11 +67,6 @@ class FinraMarginFetcher(DataSourceFetcher):
             column_name = _SYMBOL_MAP[symbol]
             result = df[[column_name]].rename(columns={column_name: "value"})
             result["value"] = pd.to_numeric(result["value"], errors="coerce")
-            if start:
-                result = result[result.index >= pd.Timestamp(start)]
-            if end:
-                end_ts = pd.Timestamp(end) + pd.offsets.MonthEnd(0)
-                result = result[result.index <= end_ts]
             if result.empty:
                 raise FetchError(
                     f"No data for symbol '{symbol}' in the given date range"

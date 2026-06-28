@@ -14,18 +14,19 @@ _disk_cache = DiskCache()
 _FREQUENCY_AWARE_SOURCES = {"yahoo", "stooq"}
 
 
+_BATCH_CACHE_ATTRS = ('_full_table_cache', '_full_data_cache', '_full_df_cache', '_excel_cache')
+
 def _has_batch_cache(fetcher, source):
     """Check if fetcher has batch caching capability (attr exists AND has value)."""
-    for attr in ('_full_table_cache', '_full_data_cache', '_full_df_cache'):
+    for attr in _BATCH_CACHE_ATTRS:
         val = getattr(fetcher, attr, None)
         if val is not None:
             return True
     return False
 
-
 def _get_batch_cache(fetcher, source):
     """Check if fetcher has a batch cache and return the full table."""
-    for attr in ('_full_table_cache', '_full_data_cache', '_full_df_cache'):
+    for attr in _BATCH_CACHE_ATTRS:
         cache = getattr(fetcher, attr, None)
         if hasattr(cache, 'get'):  # dict-like
             if cache.get(source) is not None:
@@ -161,6 +162,7 @@ def _single_query(
             return cached
 
     full_df = None
+    was_fetched = False
 
     if use_cache:
         # Step 1: Check in-memory batch cache (same process)
@@ -175,9 +177,12 @@ def _single_query(
         if full_df is None:
             disk_df = _disk_cache.get(source, f"_{source}_full_table", frequency=effective_freq)
             if disk_df is not None and len(disk_df):
-                covers_start = not start or disk_df.index.min() <= pd.Timestamp(start)
-                covers_end = not end or disk_df.index.max() >= pd.Timestamp(end)
-                if covers_start and covers_end:
+                overlaps = True
+                if start and disk_df.index.max() < pd.Timestamp(start):
+                    overlaps = False
+                if end and disk_df.index.min() > pd.Timestamp(end):
+                    overlaps = False
+                if overlaps:
                     filtered = _filter_by_date(disk_df, start, end)
                     match_cols = [c for c in filtered.columns if c == symbol or c.startswith(symbol + "_")]
                     if match_cols:
@@ -187,59 +192,69 @@ def _single_query(
         if full_df is None:
             disk_df = _disk_cache.get(source, symbol, frequency=effective_freq)
             if disk_df is not None and len(disk_df):
-                covers_start = not start or disk_df.index.min() <= pd.Timestamp(start)
-                covers_end = not end or disk_df.index.max() >= pd.Timestamp(end)
-                if covers_start and covers_end:
+                # Use cached data if it overlaps with requested range
+                # (cached data may not start as early or end as late as requested,
+                # but we serve what we have and merge on next fetch)
+                overlaps = True
+                if start and disk_df.index.max() < pd.Timestamp(start):
+                    overlaps = False
+                if end and disk_df.index.min() > pd.Timestamp(end):
+                    overlaps = False
+                if overlaps:
                     filtered = _filter_by_date(disk_df, start, end)
                     if len(filtered):
                         full_df = filtered
 
-        if full_df is None:
-            # Check if fetcher has batch cache (full table already loaded in-memory)
-            has_batch_cache = _has_batch_cache(fetcher, source)
+    # Step 4: Fetch if not found in cache
+    if full_df is None:
+        was_fetched = True
+        # Check if fetcher has batch cache (full table already loaded in-memory)
+        has_batch_cache = _has_batch_cache(fetcher, source)
 
-            df_fetched = None
-            if has_batch_cache:
-                batch_df = _get_batch_cache(fetcher, source)
-                if batch_df is not None and symbol in batch_df.columns:
-                    df_fetched = batch_df[[symbol]].rename(columns={symbol: "value"})
+        df_fetched = None
+        if has_batch_cache:
+            batch_df = _get_batch_cache(fetcher, source)
+            if batch_df is not None and symbol in batch_df.columns:
+                df_fetched = batch_df[[symbol]].rename(columns={symbol: "value"})
 
-            if df_fetched is None:
-                df_fetched = fetcher.fetch(
-                    symbol, start=start, end=end, sub_field=sub_field, frequency=effective_freq
-                )
+        if df_fetched is None:
+            df_fetched = fetcher.fetch(
+                symbol, start=start, end=end, sub_field=sub_field, frequency=effective_freq
+            )
 
-            full_df = _filter_by_date(df_fetched, start, end)
+        full_df = _filter_by_date(df_fetched, start, end)
 
-            if use_cache:
-                try:
-                    # For batch cache sources, store full table under source-level key
-                    # After fetcher.fetch(), the full table should be in fetcher's internal cache
-                    if _has_batch_cache(fetcher, source):
-                        # Directly access cache attributes to avoid nested function shadowing
-                        for attr in ('_full_table_cache', '_full_data_cache', '_full_df_cache'):
-                            full_table = getattr(fetcher, attr, None)
-                            if full_table is not None and hasattr(full_table, 'get'):
-                                cached_df = full_table.get(source)
-                                if cached_df is not None and len(cached_df):
-                                    _disk_cache.set(source, f"_{source}_full_table", cached_df, frequency=effective_freq)
-                                    break
-                        else:
-                            # Fallback to module-level helper
-                            full_table = _get_batch_cache(fetcher, source)
-                            if full_table is not None and len(full_table):
-                                _disk_cache.set(source, f"_{source}_full_table", full_table, frequency=effective_freq)
-                    else:
-                        existing = _disk_cache.get(source, symbol, frequency=effective_freq)
-                        if existing is not None and len(existing):
-                            merged = pd.concat([existing, df_fetched])
-                            merged = merged[~merged.index.duplicated(keep="first")]
-                            merged.sort_index(inplace=True)
-                            _disk_cache.set(source, symbol, merged, frequency=effective_freq)
-                        else:
-                            _disk_cache.set(source, symbol, df_fetched, frequency=effective_freq)
-                except Exception:
-                    pass
+    # Step 5: Store freshly fetched data in disk cache (only if use_cache)
+    if use_cache and was_fetched and full_df is not None:
+        try:
+            # If fetcher fetches full data regardless of start/end,
+            # store the unfiltered full table by symbol name so
+            # cross-process queries for different date ranges can use it
+            if getattr(fetcher, '_fetches_full_data', False) and df_fetched is not None:
+                _disk_cache.set(source, symbol, df_fetched, frequency=effective_freq)
+            elif not _has_batch_cache(fetcher, source):
+                existing = _disk_cache.get(source, symbol, frequency=effective_freq)
+                if existing is not None and len(existing):
+                    merged = pd.concat([existing, full_df])
+                    merged = merged[~merged.index.duplicated(keep="first")]
+                    merged.sort_index(inplace=True)
+                    _disk_cache.set(source, symbol, merged, frequency=effective_freq)
+                else:
+                    _disk_cache.set(source, symbol, full_df, frequency=effective_freq)
+            else:
+                for attr in _BATCH_CACHE_ATTRS:
+                    full_table = getattr(fetcher, attr, None)
+                    if full_table is not None and hasattr(full_table, 'get'):
+                        cached_df = full_table.get(source)
+                        if cached_df is not None and len(cached_df):
+                            _disk_cache.set(source, f"_{source}_full_table", cached_df, frequency=effective_freq)
+                            break
+                else:
+                    full_table = _get_batch_cache(fetcher, source)
+                    if full_table is not None and len(full_table):
+                        _disk_cache.set(source, f"_{source}_full_table", full_table, frequency=effective_freq)
+        except Exception:
+            pass
 
     if sub_field and len(full_df.columns) > 1:
         full_df = _apply_sub_field(full_df, sub_field)
@@ -411,5 +426,33 @@ def clear_disk_cache() -> None:
         pass
 
 
+# Known source modules and their fetcher class names
+_SOURCE_MODULES = {
+    "yahoo": ("financial_data_query.sources.yahoo", "YahooFetcher"),
+    "fred": ("financial_data_query.sources.fred", "FredFetcher"),
+    "stooq": ("financial_data_query.sources.stooq", "StooqFetcher"),
+    "tw_eco": ("financial_data_query.sources.tw_ndc", "TwEcoFetcher"),
+    "tw_pmi": ("financial_data_query.sources.tw_ndc", "TwPmiFetcher"),
+    "moea": ("financial_data_query.sources.moeab", "MoeaFetcher"),
+    "finra_margin": ("financial_data_query.sources.finra_margin", "FinraMarginFetcher"),
+    "ici": ("financial_data_query.sources.ici", "IciFetcher"),
+    "macroMicro": ("financial_data_query.sources.macroMicro", "MacroMicroFetcher"),
+    "usTreasuryApi": ("financial_data_query.sources.us_treasury", "UsTreasuryFetcher"),
+    "multpl": ("financial_data_query.sources.multpl", "MultplFetcher"),
+    "akshare": ("financial_data_query.sources.akshare", "AkShareFetcher"),
+    "zillow": ("financial_data_query.sources.zillow", "ZillowFetcher"),
+    "optioncharts": ("financial_data_query.sources.optioncharts", "OptionchartsFetcher"),
+}
+
+
 def _import_sources() -> None:
-    from financial_data_query import sources  # noqa: F401
+    from importlib import import_module
+    for source_name, (module_name, class_name) in _SOURCE_MODULES.items():
+        if source_name in Registry._fetchers:
+            continue
+        try:
+            mod = import_module(module_name)
+            fetcher_cls = getattr(mod, class_name)
+            Registry.register(fetcher_cls)
+        except (ImportError, AttributeError):
+            pass

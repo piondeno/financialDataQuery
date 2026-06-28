@@ -61,6 +61,7 @@ class UsTreasuryFetcher(DataSourceFetcher):
     """美國財政部公債拍賣資料來源。"""
 
     source_name = "usTreasuryApi"
+    _fetches_full_data = True
 
     def fetch(
         self,
@@ -109,20 +110,11 @@ class UsTreasuryFetcher(DataSourceFetcher):
         if security_term:
             df = df[df["security_term"] == security_term]
 
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
-
         if df.empty:
             term_desc = security_term if security_term else "所有期限"
-            date_desc = f"{start} ~ {end}" if start and end else "全部"
             raise FetchError(
-                f"在日期範圍「{date_desc}」內找不到期限為「{term_desc}」的拍賣資料"
+                f"找不到期限為「{term_desc}」的拍賣資料"
             )
-
-        if sub_field and sub_field in df.columns:
-            df = df[[sub_field]]
 
         return df
 

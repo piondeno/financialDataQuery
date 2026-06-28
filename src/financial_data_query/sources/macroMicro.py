@@ -132,6 +132,7 @@ def _get_chrome_version_main() -> int | None:
 
 class MacroMicroFetcher(DataSourceFetcher):
     source_name = "macroMicro"
+    _fetches_full_data = True
 
     def _create_driver(self):
         options = uc.ChromeOptions()
@@ -185,11 +186,6 @@ class MacroMicroFetcher(DataSourceFetcher):
             df = pd.DataFrame(rows, columns=["date", "value"])
             df.set_index("date", inplace=True)
 
-            if start:
-                df = df[df.index >= pd.Timestamp(start)]
-            if end:
-                df = df[df.index <= pd.Timestamp(end)]
-
             return df
         except FetchError:
             raise
@@ -241,11 +237,6 @@ class MacroMicroFetcher(DataSourceFetcher):
 
                 df = pd.DataFrame(rows, columns=["date", "value"])
                 df.set_index("date", inplace=True)
-
-                if start:
-                    df = df[df.index >= pd.Timestamp(start)]
-                if end:
-                    df = df[df.index <= pd.Timestamp(end)]
 
                 results[symbol] = df
         except FetchError:

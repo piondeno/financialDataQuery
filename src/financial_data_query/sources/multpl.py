@@ -60,7 +60,7 @@ class MultplFetcher(DataSourceFetcher):
         df.set_index("date", inplace=True)
 
         value_str = df["value"].astype(str).str.replace(",", "").str.strip()
-        value_str = value_str.str.replace(r"\u2002", "", regex=True)
+        value_str = value_str.str.replace("\u2002", "", regex=False)
         value_str = value_str.str.replace("†", "", regex=False)
         df["value"] = pd.to_numeric(value_str.str.rstrip("%"), errors="coerce")
         df = df.dropna(subset=["value"])

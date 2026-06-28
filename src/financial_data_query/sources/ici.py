@@ -66,6 +66,7 @@ _SYMBOL_MAP = {
 class IciFetcher(DataSourceFetcher):
     source_name = "ici"
     _excel_cache: dict[str, pd.DataFrame] = {}
+    _fetches_full_data = True
 
     def _get_parsed_df(self, prefix: str) -> pd.DataFrame:
         if prefix not in self._excel_cache:
@@ -113,10 +114,6 @@ class IciFetcher(DataSourceFetcher):
         values = pd.to_numeric(data_rows.iloc[:, col_idx], errors="coerce")
         result = pd.DataFrame({"value": values.values}, index=dates.values)
         result = result[~result.index.isna() & ~result["value"].isna()]
-        if start:
-            result = result[result.index >= pd.Timestamp(start)]
-        if end:
-            result = result[result.index <= pd.Timestamp(end)]
         if result.empty:
             raise FetchError(
                 f"No data for column '{column_name}' in the given date range"

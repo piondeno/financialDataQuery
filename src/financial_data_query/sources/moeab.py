@@ -2,8 +2,9 @@ from abc import ABC
 import re
 import time
 import pandas as pd
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, _filter_by_date
 from financial_data_query.errors import FetchError
+from financial_data_query.constants import ROC_EPOCH_AD, MOEA_EARLIEST_DATE
 
 try:
     from bs4 import BeautifulSoup
@@ -93,12 +94,11 @@ class MoeaFetcher(DataSourceFetcher, ABC):
             raise FetchError("表格資料不足")
 
         # Build column header mapping from row 1 (commodities under regions)
-        region_names = ["美國", "日本", "中國大陸及香港", "東協", "歐洲", "其他地區"]
         commodities = self.VALID_COMMODITIES  # 12 items
 
         # Parse symbol names: commodity_region for each column
         col_symbols = {}  # col_index -> "commodity_region"
-        for region_idx, region in enumerate(region_names):
+        for region_idx, region in enumerate(REGION_NAMES):
             for comm_idx, comm in enumerate(commodities):
                 col_idx = 2 + region_idx * len(commodities) + comm_idx
                 col_symbols[col_idx] = f"{comm}_{region}"
@@ -133,7 +133,7 @@ class MoeaFetcher(DataSourceFetcher, ABC):
                 continue  # Need year to create date
 
             # Convert ROC year to AD year
-            year_ad = current_year_roc + 1911
+            year_ad = current_year_roc + ROC_EPOCH_AD
 
             try:
                 date_val = pd.Timestamp(f"{year_ad}-{current_month:02d}-01") + pd.offsets.MonthEnd(0)
@@ -216,8 +216,8 @@ class MoeaFetcher(DataSourceFetcher, ABC):
 
         found_date = False
         for opt in select.options:
-            if "73年9月" in opt.text:
-                select.select_by_visible_text("73年9月")
+            if MOEA_EARLIEST_DATE in opt.text:
+                select.select_by_visible_text(MOEA_EARLIEST_DATE)
                 found_date = True
                 break
 
@@ -318,6 +318,12 @@ class MoeaFetcher(DataSourceFetcher, ABC):
             )
         return symbol
 
+    @staticmethod
+    def _rename_region_columns(df: pd.DataFrame, commodity: str) -> None:
+        """Rename columns from 'commodity_region' to just 'region'."""
+        rename_map = {f"{commodity}_{region}": region for region in REGION_NAMES}
+        df.rename(columns=rename_map, inplace=True)
+
     def fetch(
         self,
         symbol: str,
@@ -374,14 +380,10 @@ class MoeaFetcher(DataSourceFetcher, ABC):
         df = df_full[region_cols].copy()
 
         # Rename columns to region names only (without commodity prefix)
-        rename_map = {f"{commodity}_{region}": region for region in REGION_NAMES}
-        df.rename(columns=rename_map, inplace=True)
+        self._rename_region_columns(df, commodity)
 
         # Filter by date range if specified
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
+        df = _filter_by_date(df, start, end)
 
         # Drop rows with all NaN values
         df = df.dropna(how="all")
@@ -432,13 +434,9 @@ class MoeaFetcher(DataSourceFetcher, ABC):
                 )
 
             df = df_full[region_cols].copy()
-            rename_map = {f"{commodity}_{region}": region for region in REGION_NAMES}
-            df.rename(columns=rename_map, inplace=True)
+            self._rename_region_columns(df, commodity)
 
-            if start:
-                df = df[df.index >= pd.Timestamp(start)]
-            if end:
-                df = df[df.index <= pd.Timestamp(end)]
+            df = _filter_by_date(df, start, end)
 
             df = df.dropna(how="all")
 

@@ -37,6 +37,8 @@ def _create_sample_mf_xls(path: str):
 class TestIciFetcher:
     def setup_method(self):
         self.fetcher = IciFetcher()
+        # Clear class-level cache to avoid interference between tests
+        IciFetcher._excel_cache.clear()
 
     def test_source_name(self):
         assert self.fetcher.source_name == "ici"
@@ -64,16 +66,19 @@ class TestIciFetcher:
             self.fetcher.fetch("invalid_symbol")
 
     @patch("financial_data_query.sources.ici.urllib.request.urlretrieve")
-    def test_fetch_with_date_filter(self, mock_retrieve):
+    def test_fetch_ignores_date_filter(self, mock_retrieve):
+        """ICI returns full data regardless of start/end (fetches_full_data=True)."""
         xls_path = tempfile.mktemp(suffix=".xls")
         try:
             _create_sample_mf_xls(xls_path)
             mock_retrieve.side_effect = lambda url, path: os.rename(xls_path, path)
 
+            # With start filter, still returns all data (ici ignores start/end)
             df = self.fetcher.fetch("mf_total", start="2024-02-01")
 
-            assert len(df) == 1
-            assert df.iloc[0]["value"] == -2979
+            assert len(df) == 2
+            assert df.iloc[0]["value"] == -20567
+            assert df.iloc[1]["value"] == -2979
         finally:
             if os.path.exists(xls_path):
                 os.unlink(xls_path)
@@ -81,18 +86,23 @@ class TestIciFetcher:
     @patch("financial_data_query.sources.ici.urllib.request.urlretrieve")
     def test_temp_file_is_cleaned_up(self, mock_retrieve):
         xls_path = tempfile.mktemp(suffix=".xls")
-        cleaned_paths = []
 
         def track_cleanup(url, path):
             _create_sample_mf_xls(xls_path)
             os.rename(xls_path, path)
-            cleaned_paths.append(path)
 
         mock_retrieve.side_effect = track_cleanup
 
         self.fetcher.fetch("mf_total")
 
-        assert not os.path.exists(cleaned_paths[0])
+        tmp_path = self.fetcher._tmp_path_cache
+        assert tmp_path is not None
+        assert os.path.exists(tmp_path)
+
+        self.fetcher.cleanup()
+
+        assert self.fetcher._tmp_path_cache is None
+        assert not os.path.exists(tmp_path)
 
     def test_batch_fetch_multiple_symbols(self):
         with patch("financial_data_query.sources.ici.urllib.request.urlretrieve") as mock_retrieve:

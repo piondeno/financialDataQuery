@@ -34,14 +34,14 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"`, `"moea"`, `"zillow"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"akshare"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"`, `"moea"`, `"zillow"`, `"optioncharts"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
 | `sub_field` | `str` | 指定回傳欄位，可選 |
 | `frequency` | `str` | 資料頻率，可選 |
 | `output` | `str` | 輸出格式：`"json"`（預設）或 `"dataframe"` |
-| `use_cache` | `bool` | 是否使用記憶體快取，預設 `True` |
+| `use_cache` | `bool` | 是否使用記憶體 + 磁碟快取，預設 `True` |
 
 **回傳：**
 - `output="json"` → `dict[str, list[dict]]`
@@ -64,14 +64,24 @@ df = query("yahoo", "AAPL", output="dataframe")
 ### 其他公開函數
 
 ```python
-from financial_data_query import list_sources, register_source, clear_cache
+from financial_data_query import list_sources, register_source, clear_cache, clear_disk_cache
 
 # 列出所有已註冊的資料來源
-list_sources()  # ['akshare', 'finra_margin', 'fred', 'ici', 'macroMicro', 'moea', 'multpl', 'stooq', 'tw_eco', 'tw_pmi', 'usTreasuryApi', 'yahoo', 'zillow']
+list_sources()
 
 # 清除記憶體快取
 clear_cache()
+
+# 清除舊的磁碟快取（保留今天）
+clear_disk_cache()
 ```
+
+### 快取機制
+
+所有資料來源皆啟用磁碟快取。資料首次下載時儲存完整歷史，後續查詢從快取截取日期範圍。
+
+- **記憶體快取**：同行程內的 LRU 快取（`clear_cache()` 清除）
+- **磁碟快取**：SQLite 檔，按日輪替，檔名 `YYYY-MM-DD.db`（`clear_disk_cache()` 清除舊檔）
 
 ## 支援的資料來源
 
@@ -114,7 +124,7 @@ result = query("fred", "CPIAUCSL")
 
 ```python
 # 安裝額外依賴
-pip install -e ".[akshare]"
+pip install akshare
 
 # 查詢 BDI 指數週線
 result = query("akshare", "bdi", frequency="weekly")
@@ -193,7 +203,7 @@ result = query("finra_margin", ["debit_balances", "free_credit_margin"])
 - 底層：直接下載 ICI 發布的 XLS 檔案
 - 免 API key
 - 資料來源：Investment Company Institute
-- 資料範圍：2024-01 至今，每週更新
+- 資料範圍：2024-01 至今，每週更新（MF/ETF/Combined）；2013-01 至今，每月更新（MMF）
 
 **Symbols：**
 
@@ -237,6 +247,77 @@ result = query("finra_margin", ["debit_balances", "free_credit_margin"])
 | `combined_bond_taxable` | 課稅債券型基金+ETF |
 | `combined_bond_municipal` | 地方政府債券型基金+ETF |
 | `combined_commodity` | 商品型基金+ETF |
+| `mmf_gov_total` | 貨幣市場基金-政府基金 總投資組合 |
+| `mmf_gov_treasury` | 貨幣市場基金-政府基金 美國公債 |
+| `mmf_gov_agency` | 貨幣市場基金-政府基金 政府機構債務 |
+| `mmf_gov_repo_total` | 貨幣市場基金-政府基金 回購協議合計 |
+| `mmf_gov_repo_agency` | 貨幣市場基金-政府基金 政府機構回購 |
+| `mmf_gov_repo_treasury` | 貨幣市場基金-政府基金 公債回購 |
+| `mmf_gov_repo_other` | 貨幣市場基金-政府基金 其他回購 |
+| `mmf_gov_cdp` | 貨幣市場基金-政府基金 存單 |
+| `mmf_gov_ntd` | 貨幣市場基金-政府基金 不可議轉定期存款（2016-04 起） |
+| `mmf_gov_cp_total` | 貨幣市場基金-政府基金 商業本票合計 |
+| `mmf_gov_cp_assetbacked` | 貨幣市場基金-政府基金 資產支持本票 |
+| `mmf_gov_cp_financial` | 貨幣市場基金-政府基金 金融公司本票 |
+| `mmf_gov_cp_nonfinancial` | 貨幣市場基金-政府基金 非金融公司本票 |
+| `mmf_gov_otherabs` | 貨幣市場基金-政府基金 其他資產支持證券（2016-04 起） |
+| `mmf_gov_muni_total` | 貨幣市場基金-政府基金 市政債務合計 |
+| `mmf_gov_muni_vrdn` | 貨幣市場基金-政府基金 浮動利率需求票據 |
+| `mmf_gov_muni_other` | 貨幣市場基金-政府基金 其他市政證券 |
+| `mmf_gov_tob` | 貨幣市場基金-政府基金 認購選擇權債券（2016-04 起） |
+| `mmf_gov_other_instrument` | 貨幣市場基金-政府基金 其他工具 |
+| `mmf_gov_icfa` | 貨幣市場基金-政府基金 保險公司資金協議 |
+| `mmf_gov_inv_company` | 貨幣市場基金-政府基金 投資公司 |
+| `mmf_gov_nonus_sov` | 貨幣市場基金-政府基金 非美國主權債務（2016-04 起） |
+| `mmf_gov_other_note` | 貨幣市場基金-政府基金 其他票據（僅至 2016-03） |
+| `mmf_gov_wam` | 貨幣市場基金-政府基金 加權平均到期日 |
+| `mmf_gov_wal` | 貨幣市場基金-政府基金 加權平均存續期 |
+| `mmf_prime_total` | 貨幣市場基金-優質基金 總投資組合 |
+| `mmf_prime_treasury` | 貨幣市場基金-優質基金 美國公債 |
+| `mmf_prime_agency` | 貨幣市場基金-優質基金 政府機構債務 |
+| `mmf_prime_repo_total` | 貨幣市場基金-優質基金 回購協議合計 |
+| `mmf_prime_repo_agency` | 貨幣市場基金-優質基金 政府機構回購 |
+| `mmf_prime_repo_treasury` | 貨幣市場基金-優質基金 公債回購 |
+| `mmf_prime_repo_other` | 貨幣市場基金-優質基金 其他回購 |
+| `mmf_prime_cdp` | 貨幣市場基金-優質基金 存單 |
+| `mmf_prime_ntd` | 貨幣市場基金-優質基金 不可議轉定期存款（2016-04 起） |
+| `mmf_prime_cp_total` | 貨幣市場基金-優質基金 商業本票合計 |
+| `mmf_prime_cp_assetbacked` | 貨幣市場基金-優質基金 資產支持本票 |
+| `mmf_prime_cp_financial` | 貨幣市場基金-優質基金 金融公司本票 |
+| `mmf_prime_cp_nonfinancial` | 貨幣市場基金-優質基金 非金融公司本票 |
+| `mmf_prime_otherabs` | 貨幣市場基金-優質基金 其他資產支持證券（2016-04 起） |
+| `mmf_prime_muni_total` | 貨幣市場基金-優質基金 市政債務合計 |
+| `mmf_prime_muni_vrdn` | 貨幣市場基金-優質基金 浮動利率需求票據 |
+| `mmf_prime_muni_other` | 貨幣市場基金-優質基金 其他市政證券 |
+| `mmf_prime_tob` | 貨幣市場基金-優質基金 認購選擇權債券（2016-04 起） |
+| `mmf_prime_other_instrument` | 貨幣市場基金-優質基金 其他工具 |
+| `mmf_prime_icfa` | 貨幣市場基金-優質基金 保險公司資金協議 |
+| `mmf_prime_inv_company` | 貨幣市場基金-優質基金 投資公司 |
+| `mmf_prime_nonus_sov` | 貨幣市場基金-優質基金 非美國主權債務（2016-04 起） |
+| `mmf_prime_other_note` | 貨幣市場基金-優質基金 其他票據（僅至 2016-03） |
+| `mmf_prime_wam` | 貨幣市場基金-優質基金 加權平均到期日 |
+| `mmf_prime_wal` | 貨幣市場基金-優質基金 加權平均存續期 |
+| `mmf_taxexempt_total` | 貨幣市場基金-免稅基金 總投資組合 |
+| `mmf_taxexempt_treasury` | 貨幣市場基金-免稅基金 美國公債 |
+| `mmf_taxexempt_agency` | 貨幣市場基金-免稅基金 政府機構債務 |
+| `mmf_taxexempt_repo_total` | 貨幣市場基金-免稅基金 回購協議合計 |
+| `mmf_taxexempt_repo_agency` | 貨幣市場基金-免稅基金 政府機構回購 |
+| `mmf_taxexempt_repo_treasury` | 貨幣市場基金-免稅基金 公債回購 |
+| `mmf_taxexempt_repo_other` | 貨幣市場基金-免稅基金 其他回購 |
+| `mmf_taxexempt_cdp` | 貨幣市場基金-免稅基金 存單 |
+| `mmf_taxexempt_cp_total` | 貨幣市場基金-免稅基金 商業本票合計 |
+| `mmf_taxexempt_cp_assetbacked` | 貨幣市場基金-免稅基金 資產支持本票 |
+| `mmf_taxexempt_cp_financial` | 貨幣市場基金-免稅基金 金融公司本票 |
+| `mmf_taxexempt_cp_nonfinancial` | 貨幣市場基金-免稅基金 非金融公司本票 |
+| `mmf_taxexempt_muni_total` | 貨幣市場基金-免稅基金 市政債務合計 |
+| `mmf_taxexempt_muni_vrdn` | 貨幣市場基金-免稅基金 浮動利率需求票據 |
+| `mmf_taxexempt_muni_other` | 貨幣市場基金-免稅基金 其他市政證券 |
+| `mmf_taxexempt_other_instrument` | 貨幣市場基金-免稅基金 其他工具 |
+| `mmf_taxexempt_inv_company` | 貨幣市場基金-免稅基金 投資公司 |
+| `mmf_taxexempt_tob` | 貨幣市場基金-免稅基金 認購選擇權債券（2016-04 起） |
+| `mmf_taxexempt_other_note` | 貨幣市場基金-免稅基金 其他票據（僅至 2016-03） |
+| `mmf_taxexempt_wam` | 貨幣市場基金-免稅基金 加權平均到期日 |
+| `mmf_taxexempt_wal` | 貨幣市場基金-免稅基金 加權平均存續期 |
 
 ```python
 # 安裝額外依賴
@@ -253,6 +334,18 @@ result = query("ici", "mf_equity_total", start="2024-01-01", end="2024-06-30")
 
 # 批量查詢
 result = query("ici", ["mf_total", "etf_total", "combined_total"])
+
+# 查詢貨幣市場基金 - 政府基金總投資組合
+result = query("ici", "mmf_gov_total")
+
+# 查詢貨幣市場基金 - 優質基金商業本票
+result = query("ici", "mmf_prime_cp_total")
+
+# 查詢貨幣市場基金 - 免稅基金市政債務
+result = query("ici", "mmf_taxexempt_muni_total")
+
+# 批量查詢貨幣市場基金三大類總投資組合
+result = query("ici", ["mmf_gov_total", "mmf_prime_total", "mmf_taxexempt_total"])
 ```
 
 ### NCD 台灣經濟指標 (`"tw_eco"`)
@@ -277,7 +370,7 @@ result = query("ici", ["mf_total", "etf_total", "combined_total"])
 
 ```python
 # 安裝額外依賴
-pip install -e ".[stooq]"
+pip install -e ".[tw_ndc]"
 
 # 查詢景氣綜合分數
 result = query("tw_eco", "景氣對策信號(分)")
@@ -319,7 +412,7 @@ result = query("tw_eco", ["景氣對策信號(燈號)", "領先指標綜合指�
 
 ```python
 # 安裝額外依賴
-pip install -e ".[stooq]"
+pip install -e ".[tw_ndc]"
 
 # 查詢製造業 PMI
 result = query("tw_pmi", "製造業PMI")
@@ -360,16 +453,18 @@ python -c "from financial_data_query.sources.macroMicro import macroMicroSymbolL
 |--------|------|
 | `china-reverse-repo-rate-7-day` | 中國-逆回購利率(日數據)-7天期 | 數據 |
 | `cn-dr007` | 中國-銀行間債券質押式回購利率[DR007](7天期) | 數據 |
+| `ism-manufacturing-backlogoforders` | 美國-ISM製造業指數[PMI]-未完成訂單 | 數據 |
 | `ism-manufacturing-customersinventories` | 美國-ISM製造業指數[PMI]-客戶存貨 | 數據 |
 | `ism-manufacturing-neworders` | 美國-ISM製造業指數[PMI]-新訂單 | 數據 |
 | `ism-manufacturing-supplierdeliveries` | 美國-ISM製造業指數[PMI]-供應商交貨 | 數據 |
+| `tw-inventories-sales-ratio-manufacturing` | 台灣-製造業存貨率 | 數據 |
 | `us-5year-cds` | 美國_5年信用違約交換 |
 | `us-new-tenant-rent-index` | US - New Tenant Rent Index | Series |
 <!-- MACROMICRO_SYMBOLS_END -->
 
 ```python
 # 安裝額外依賴
-pip install -e ".[stooq]"
+pip install -e ".[macroMicro]"
 
 # 查詢
 result = query("macroMicro", "china-reverse-repo-rate-7-day")
@@ -401,7 +496,7 @@ result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
 | `note_10y` | 10 年 | T-Note（國庫券） |
 | `bond_30y` | 30 年 | T-Bond（國庫券） |
 | `allBond` | 所有期限 | 回傳日期範圍內的所有拍賣資料 |
-| `debtMaturity` | 到期債務分析 | 配合 `start`（預設今天）和 `end` 指定到期日期範圍 |
+| `debtMaturity` | 到期債務分析 | 配合 `start`（預設今天）和 `end`（**必填**）指定到期日期範圍 |
 
 **到期分析回傳欄位：** `T_Bills`, `T_Notes`, `T_Bonds`, `TIPS`, `FRNs`（單位：美元，單行 DataFrame）
 
@@ -409,6 +504,7 @@ result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
 
 | 欄位 | 說明 |
 |------|------|
+| `issue_date` | 發行日 |
 | `security_term` | 債券期限（例：10-Year, 13-Week） |
 | `maturity_date` | 到期日 |
 | `int_rate` | 票面利率（%） |
@@ -417,8 +513,26 @@ result = query("macroMicro", ["china-reverse-repo-rate-7-day", "cn-dr007"])
 | `low_yield` | 最低收益率（%） |
 | `offering_amount` | 發行金額（美元） |
 | `total_accepted` | 總中标金額（美元） |
+| `total_tendered` | 總投標金額（美元） |
 | `bid_to_cover_ratio` | 投標覆蓋率（投標總額/中标總額） |
 | `auction_format` | 拍賣方式（Multi-Price / Price-Based） |
+| `primary_dealer_tendered` | 一級交易商投標金額 |
+| `primary_dealer_accepted` | 一級交易商中标金額 |
+| `comp_accepted` | 競爭標中标金額 |
+| `comp_tendered` | 競爭標投標金額 |
+| `noncomp_accepted` | 非競爭標中标金額 |
+| `direct_bidder_tendered` | 直接投標人投標金額 |
+| `direct_bidder_accepted` | 直接投標人中标金額 |
+| `indirect_bidder_tendered` | 間接投標人投標金額 |
+| `indirect_bidder_accepted` | 間接投標人中标金額 |
+| `soma_tendered` | SOMA 投標金額 |
+| `soma_accepted` | SOMA 中标金額 |
+| `fima_noncomp_tendered` | FIMA 非競爭標投標金額 |
+| `fima_noncomp_accepted` | FIMA 非競爭標中标金額 |
+| `treas_retail_tenders_accepted` | 國庫零售投標中标金額 |
+| `comp_tenders_accepted` | 競爭標投標筆數 |
+| `noncomp_tenders_accepted` | 非競爭標投標筆數 |
+| `treas_retail_accepted` | 國庫零售投標筆數 |
 
 ```python
 # 查詢 10 年期公債
@@ -556,6 +670,51 @@ result = query("zillow", ["ZHVI", "ZORI", "FSIT"], sub_field="NY")
 **注意事項：**
 - `sub_field` 預設回傳全部三個地區，指定 `US`、`NY`、`LA` 可篩選單一地區
 - `ZORF` 僅有全國數據，無地區數據
+
+### OptionCharts (`"optioncharts"`)
+
+- 底層：`requests` + `BeautifulSoup` 網頁爬蟲
+- 免 API key
+- 資料來源：OptionCharts (https://optioncharts.io)
+- 資料範圍：2024-06 至今，每日更新
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `$SPX` | S&P 500 Index |
+| `$NDX` | NASDAQ 100 |
+
+**回傳欄位：**
+
+| 欄位 | 說明 |
+|------|------|
+| `Close Price` | 收盤價 |
+| `Option Volume Total` | 選擇權總成交量 |
+| `Option Volume Put-Call Ratio` | 選擇權成交量 P/C 比 |
+| `OI Total` | 選擇權總未平倉量 |
+| `OI Put-Call Ratio` | 選擇權未平倉 P/C 比 |
+
+```python
+# 查詢 S&P 500 選擇權數據
+result = query("optioncharts", "$SPX")
+
+# 指定日期範圍
+result = query("optioncharts", "$SPX", start="2024-07-01", end="2024-12-31")
+
+# 指定欄位
+result = query("optioncharts", "$SPX", sub_field="OI Put-Call Ratio")
+
+# 降頻為週線/月線/季線
+result = query("optioncharts", "$SPX", frequency="weekly")
+
+# 批量查詢
+result = query("optioncharts", ["$SPX", "$NDX"])
+```
+
+**注意事項：**
+- 原始數據為日頻，`frequency` 可設 `weekly`、`monthly`、`quarterly` 進行重採樣
+- Volume 欄位按頻率累加（sum），其他欄位取最後交易日值（last）
 
 ## 設定
 

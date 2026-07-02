@@ -24,7 +24,7 @@ result = query(source, symbol, start=None, end=None, sub_field=None, frequency=N
 | `sub_field` | `str` | 指定回傳欄位 |
 | `frequency` | `str` | 資料頻率 |
 | `output` | `str` | `"json"`（預設）或 `"dataframe"` |
-| `use_cache` | `bool` | 記憶體快取，預設 `True` |
+| `use_cache` | `bool` | 啟用記憶體 + 磁碟快取，預設 `True` |
 
 ## 回傳格式
 
@@ -34,10 +34,11 @@ result = query(source, symbol, start=None, end=None, sub_field=None, frequency=N
 ## 工具函數
 
 ```python
-from financial_data_query import list_sources, clear_cache, register_source
+from financial_data_query import list_sources, clear_cache, clear_disk_cache, register_source
 
 list_sources()   # 列出所有已註冊的資料來源
 clear_cache()    # 清除記憶體快取
+clear_disk_cache()  # 清除舊的磁碟快取（保留今天）
 ```
 
 ## 錯誤處理
@@ -61,6 +62,13 @@ except DataSourceError as e:
 <HARD-GATE>
 使用文件， **refs/symbols_reference.md**，進行資料源與商品代號查詢
 </HARD-GATE>
+
+## 快取機制
+
+所有資料來源皆啟用磁碟快取。資料首次下載時儲存完整歷史，後續查詢從快取截取日期範圍。
+
+- 記憶體快取：同行程內的 LRU 快取（`clear_cache()` 清除）
+- 磁碟快取：SQLite 檔，按日輪替，檔名 `YYYY-MM-DD.db`（`clear_disk_cache()` 清除舊檔）
 
 ## 使用模式
 

@@ -40,6 +40,7 @@ US Treasury Fiscal Data API 公債拍賣數據。免 API key，免瀏覽器。
 
 | 欄位 | 說明 |
 |------|------|
+| `issue_date` | 拍賣日 |
 | `security_term` | 債券期限（例：10-Year, 13-Week） |
 | `maturity_date` | 到期日 |
 | `int_rate` | 票面利率（%） |
@@ -48,8 +49,61 @@ US Treasury Fiscal Data API 公債拍賣數據。免 API key，免瀏覽器。
 | `low_yield` | 最低收益率（%） |
 | `offering_amount` | 發行金額（美元） |
 | `total_accepted` | 總中标金額（美元） |
+| `total_tendered` | 總投標金額（美元） |
 | `bid_to_cover_ratio` | 投標覆蓋率 |
 | `auction_format` | 拍賣方式（Multi-Price / Price-Based） |
+
+### 一級交易商
+
+| 欄位 | 說明 |
+|------|------|
+| `primary_dealer_tendered` | 一級交易商投標金額（美元） |
+| `primary_dealer_accepted` | 一級交易商中标金額（美元） |
+
+### 競爭 / 非競爭投標
+
+| 欄位 | 說明 |
+|------|------|
+| `comp_accepted` | 競爭投標中标金額（美元） |
+| `comp_tendered` | 競爭投標金額（美元） |
+| `noncomp_accepted` | 非競爭投標中标金額（美元） |
+
+### 直接 / 間接投標人
+
+| 欄位 | 說明 |
+|------|------|
+| `direct_bidder_tendered` | 直接投標人投標金額（美元） |
+| `direct_bidder_accepted` | 直接投標人中标金額（美元） |
+| `indirect_bidder_tendered` | 間接投標人投標金額（美元） |
+| `indirect_bidder_accepted` | 間接投標人中标金額（美元） |
+
+### SOMA（System Open Market Account）
+
+| 欄位 | 說明 |
+|------|------|
+| `soma_tendered` | SOMA 投標金額（美元） |
+| `soma_accepted` | SOMA 中标金額（美元） |
+
+### FIMA（Foreign Official Sectors）
+
+| 欄位 | 說明 |
+|------|------|
+| `fima_noncomp_tendered` | FIMA 非競爭投標金額（美元） |
+| `fima_noncomp_accepted` | FIMA 非競爭中标金額（美元） |
+
+### 國庫零售
+
+| 欄位 | 說明 |
+|------|------|
+| `treas_retail_tenders_accepted` | 國庫零售投标中标金額（美元） |
+| `treas_retail_accepted` | 國庫零售中标金額（美元） |
+
+### 投標筆數
+
+| 欄位 | 說明 |
+|------|------|
+| `comp_tenders_accepted` | 競爭投標中标筆數 |
+| `noncomp_tenders_accepted` | 非競爭投標中标筆數 |
 
 ## 參數
 
@@ -85,6 +139,7 @@ result = query("usTreasuryApi", "note_10y", sub_field="avg_med_yield")
 
 ## 注意事項
 
-- 首次查詢會下載全部歷史資料並快取在記憶體中
-- 後續查詢使用快取，速度很快
+- 首次查詢會下載全部歷史資料並儲存至磁碟快取
+- 後續查詢從磁碟快取讀取，速度很快
 - `allBond` 回傳所有期限的拍賣記錄
+- 金額欄位單位為美元

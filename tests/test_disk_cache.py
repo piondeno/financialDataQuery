@@ -45,10 +45,13 @@ class TestDiskCache:
         return DiskCache(str(tmp_path))
 
     def test_table_name_sanitization(self, tmp_cache):
-        assert (
-            tmp_cache._table_name("yahoo", "^GSPC", "daily") == "yahoo__GSPC_daily"
-        )
-        assert tmp_cache._table_name("fred", "GDP", None) == "fred_GDP_none"
+        # Table names now use sha256 hash of symbol
+        result = tmp_cache._table_name("yahoo", "^GSPC", "daily")
+        assert result.startswith("yahoo_") and result.endswith("_daily")
+        result2 = tmp_cache._table_name("fred", "GDP", None)
+        assert result2.startswith("fred_") and result2.endswith("_none")
+        # Same symbol+frequency always produces same table name
+        assert result == tmp_cache._table_name("yahoo", "^GSPC", "daily")
 
     def test_set_and_get(self, tmp_cache):
         df = pd.DataFrame(
@@ -115,6 +118,107 @@ class TestDiskCacheCleanup:
         db_files = list(tmp_path.glob("*.db"))
         assert len(db_files) == 1
         assert "2024-01-01" not in db_files[0].name
+
+
+class TestSchemaInvalidation:
+    """Test disk cache schema invalidation for _fetches_full_data sources."""
+
+    @pytest.fixture
+    def tmp_cache(self, tmp_path):
+        return DiskCache(str(tmp_path))
+
+    def test_expected_columns_mismatch_returns_none(self, tmp_cache):
+        """When expected columns differ from cached columns, return None to force re-fetch."""
+        # Simulate old schema with fewer columns
+        old_df = pd.DataFrame(
+            {"col_A": [1, 2], "col_B": [3, 4]},
+            index=pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        )
+        tmp_cache.set("usTreasuryApi", "TEST", old_df, frequency="none")
+
+        # New code expects more columns
+        expected = ["col_A", "col_B", "col_C", "col_D"]
+        result = tmp_cache.get(
+            "usTreasuryApi", "TEST", frequency="none", expected_columns=expected
+        )
+        assert result is None
+
+    def test_expected_columns_match_returns_data(self, tmp_cache):
+        """When expected columns match cached columns, return cached data."""
+        df = pd.DataFrame(
+            {"col_A": [1, 2], "col_B": [3, 4]},
+            index=pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        )
+        tmp_cache.set("usTreasuryApi", "TEST", df, frequency="none")
+
+        # Expected columns match
+        expected = ["col_A", "col_B"]
+        result = tmp_cache.get(
+            "usTreasuryApi", "TEST", frequency="none", expected_columns=expected
+        )
+        assert result is not None
+        assert len(result) == 2
+
+    def test_expected_columns_subset_ok(self, tmp_cache):
+        """When cached data has more columns than expected, return data (newer schema is fine)."""
+        df = pd.DataFrame(
+            {"col_A": [1, 2], "col_B": [3, 4], "col_C": [5, 6]},
+            index=pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        )
+        tmp_cache.set("usTreasuryApi", "TEST", df, frequency="none")
+
+        # Only expect a subset — cached data is newer, should be OK
+        expected = ["col_A", "col_B"]
+        result = tmp_cache.get(
+            "usTreasuryApi", "TEST", frequency="none", expected_columns=expected
+        )
+        assert result is not None
+        assert len(result.columns) == 3  # Has all 3 columns
+
+    def test_no_expected_columns_always_returns_data(self, tmp_cache):
+        """When no expected_columns provided, always return cached data (backward compatible)."""
+        df = pd.DataFrame(
+            {"old_col": [1, 2]},
+            index=pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        )
+        tmp_cache.set("usTreasuryApi", "TEST", df, frequency="none")
+
+        result = tmp_cache.get("usTreasuryApi", "TEST", frequency="none")
+        assert result is not None
+        assert len(result) == 2
+
+    def test_clear_disk_cache_deletes_today(self, tmp_path):
+        """clear_disk_cache() should delete today's DB file too."""
+        from financial_data_query import clear_disk_cache
+        from financial_data_query.disk_cache import DiskCache
+        from datetime import date
+        import os
+
+        # Create a fresh cache with today's file
+        dc = DiskCache(str(tmp_path))
+        df = pd.DataFrame(
+            {"col_A": [1]},
+            index=pd.to_datetime(["2024-01-01"]),
+        )
+        dc.set("test", "TEST", df, frequency="none")
+
+        # Verify today's file exists
+        today_str = date.today().strftime("%Y-%m-%d")
+        today_db = tmp_path / f"{today_str}.db"
+        assert today_db.exists()
+
+        # Patch the module-level _disk_cache
+        import financial_data_query as fdq
+        old_cache = fdq._disk_cache
+        fdq._disk_cache = dc
+
+        try:
+            clear_disk_cache()
+        finally:
+            fdq._disk_cache = old_cache
+
+        # Today's file should be deleted
+        assert not today_db.exists()
 
 
 class TestQueryIntegration:

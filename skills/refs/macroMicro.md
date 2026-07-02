@@ -7,7 +7,7 @@ MacroMicro 宏觀經濟數據。使用 Selenium 從 Highcharts 圖表提取數�
 ## 安裝
 
 ```bash
-pip install -e ".[stooq]"
+pip install -e ".[macroMicro]"
 ```
 
 ## 建立 Symbol 映射
@@ -38,7 +38,9 @@ python -c "from financial_data_query.sources.macroMicro import macroMicroSymbolL
 | `ism-manufacturing-supplierdeliveries` | ISM 製造業 PMI - 供應商交貨指數 | 1985-01 ~ 至今（624 筆） |
 | `ism-manufacturing-neworders` | ISM 製造業 PMI - 新訂單指數 | 1948-01 ~ 至今（159 筆） |
 | `ism-manufacturing-customersinventories` | ISM 製造業 PMI - 客戶存貨指數 | 1997-01 ~ 至今（61 筆） |
+| `ism-manufacturing-backlogoforders` | ISM 製造業 PMI - 未完成訂單指數 | 1993-01 ~ 至今（69 筆，半年頻） |
 | `us-new-tenant-rent-index` | 美國新租客租金指數 | 2005-01 ~ 2025-07（31 筆，季頻） |
+| `tw-inventories-sales-ratio-manufacturing` | 台灣製造業存貨率 | 1982-01 ~ 至今（91 筆，半年頻） |
 
 ## 參數
 

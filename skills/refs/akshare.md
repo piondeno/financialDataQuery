@@ -5,13 +5,7 @@ AkShare A股歷史行情、BDI（波罗的海干散货指数）等數據。免 A
 ## 安裝
 
 ```bash
-pip install akshare -e .
-```
-
-或：
-
-```bash
-pip install financial-data-query[akshare]
+pip install akshare
 ```
 
 ## 支援商品
@@ -61,6 +55,15 @@ query("akshare", ["china_manufacturing_pmi", "china_services_pmi",
 | 欄位 | 說明 |
 |------|------|
 | `open` | 開盤價 |
+| `high` | 最高價 |
+| `low` | 最低價 |
+| `close` | 收盤價 |
+| `volume` | 成交量 |
+| `amount` | 成交金額 |
+| `amplitude` | 振幅 |
+| `pct_change` | 漲跌幅 (%) |
+| `change` | 涨跌額 |
+| `turnover_rate` | 換手率 (%) |
 
 ## WCI 回傳欄位
 
@@ -79,17 +82,6 @@ result = query("akshare", "wci")
 # 指定日期範圍（2024 年全年）
 result = query("akshare", "wci", start="2024-01-01", end="2024-12-31")
 ```
-
-## BDI 回傳欄位
-| `high` | 最高價 |
-| `low` | 最低價 |
-| `close` | 收盤價 |
-| `volume` | 成交量 |
-| `amount` | 成交金額 |
-| `amplitude` | 振幅 |
-| `pct_change` | 漲跌幅 (%) |
-| `change` | 涨跌額 |
-| `turnover_rate` | 換手率 (%) |
 
 ## BDI 回傳欄位
 
@@ -173,81 +165,6 @@ result = query("akshare", "euro_manufacturing_pmi")
 # 查詢美國 ISM 製造業 PMI（歷史最長，1970-至今）
 result = query("akshare", "usa_ism_pmi")
 # {'date': '1970-01-01', '商品': '美国ISM制造业PMI报告', '今值': 52.0, ...}
-```
-
-
-## A股回傳欄位
-
-`date`, `open`, `high`, `low`, `close`, `volume`, `amount`, `amplitude`, `pct_change`, `change`, `turnover_rate`
-
-| 欄位 | 說明 |
-|------|------|
-| `open` | 開盤價 |
-| `high` | 最高價 |
-| `low` | 最低價 |
-| `close` | 收盤價 |
-| `volume` | 成交量 |
-| `amount` | 成交金額 |
-| `amplitude` | 振幅 |
-| `pct_change` | 漲跌幅 (%) |
-| `change` | 涨跌額 |
-| `turnover_rate` | 換手率 (%) |
-
-## BDI 回傳欄位
-
-`date`, `value`, `涨跌幅`, `近3月涨跌幅`, `近6月涨跌幅`, `近1年漲跌幅`, `近2年漲跌幅`, `近3年漲跌幅`
-
-| 欄位 | 說明 |
-|------|------|
-| `value` | BDI 指數最新值 |
-| `涨跌幅` | 當日漲跌幅 (%) |
-| `近3月涨跌幅` | 近3個月漲跌幅 (%) |
-| `近6月涨跌幅` | 近6個月漲跌幅 (%) |
-| `近1年涨跌幅` | 近1年漲跌幅 (%) |
-| `近2年涨跌幅` | 近2年漲跌幅 (%) |
-| `近3年涨跌幅` | 近3年漲跌幅 (%) |
-
-## PMI 回傳欄位
-
-### china_composite_pmi（財新中國綜合 PMI）
-
-資料範圍：2014-04 ~ 至今，每月更新。涵蓋中國製造業 + 服務業綜合指數。
-
-| 欄位 | 說明 |
-|------|------|
-| `date` | 月份月末 |
-| `综合pmi` | 綜合 PMI 數值（50 為榮枯線） |
-| `change_pct` | 較上月變化值 |
-
-```python
-# 查詢財新中國綜合 PMI
-result = query("akshare", "china_composite_pmi")
-
-# 指定日期範圍（2024 年全年）
-result = query("akshare", "china_composite_pmi", start="2024-01-01", end="2024-12-31")
-
-# DataFrame 格式
-df = query("akshare", "china_composite_pmi", output="dataframe")
-```
-
-### euro_manufacturing_pmi（歐元區製造業 PMI）
-
-資料範圍：2008-02 ~ 至今，每月更新。歐元區製造業採購經理人指數初值。
-
-| 欄位 | 說明 |
-|------|------|
-| `date` | 發布日期 |
-| `商品` | 指標名稱（固定為"欧元区制造业 PMI 初值"） |
-| `今值` | 實際公布數值 |
-| `预测值` | 市場預測值 |
-| `前值` | 上月修正後數值 |
-
-```python
-# 查詢歐元區製造業 PMI
-result = query("akshare", "euro_manufacturing_pmi")
-
-# DataFrame 格式（含今值、預測值、前值）
-df = query("akshare", "euro_manufacturing_pmi", output="dataframe")
 ```
 
 ## 注意事項

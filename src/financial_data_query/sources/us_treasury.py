@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 from datetime import datetime
 from financial_data_query.base import DataSourceFetcher
+from financial_data_query.constants import DATE_FORMAT
 from financial_data_query.errors import FetchError
 
 _API_BASE_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query"
@@ -40,9 +41,46 @@ _API_COLUMNS = [
     "low_yield",
     "offering_amt",
     "total_accepted",
+    "total_tendered",
     "bid_to_cover_ratio",
     "auction_format",
+    # 一級交易商
+    "primary_dealer_tendered",
+    "primary_dealer_accepted",
+    # 競爭 / 非競爭投標
+    "comp_accepted",
+    "comp_tendered",
+    "noncomp_accepted",
+    # 直接 / 間接投標人
+    "direct_bidder_tendered",
+    "direct_bidder_accepted",
+    "indirect_bidder_tendered",
+    "indirect_bidder_accepted",
+    # SOMA
+    "soma_tendered",
+    "soma_accepted",
+    # FIMA
+    "fima_noncomp_tendered",
+    "fima_noncomp_accepted",
+    # 國庫零售
+    "treas_retail_tenders_accepted",
+    # 投標筆數
+    "comp_tenders_accepted",
+    "noncomp_tenders_accepted",
+    "treas_retail_accepted",
 ]
+
+# 非數值欄位（日期欄位和字串欄位），其餘 _API_COLUMNS 全部為數值
+_NON_NUMERIC_COLUMNS = {"issue_date", "maturity_date", "security_term", "auction_format"}
+
+def _get_numeric_columns():
+    """從 _API_COLUMNS 自動派生出數值欄位清單。"""
+    result = []
+    for col in _API_COLUMNS:
+        renamed = _COLUMN_RENAME_MAP.get(col, col)
+        if renamed not in _NON_NUMERIC_COLUMNS:
+            result.append(renamed)
+    return result
 
 # 每頁最大筆數
 _PAGE_SIZE = 10000
@@ -63,6 +101,15 @@ class UsTreasuryFetcher(DataSourceFetcher):
     source_name = "usTreasuryApi"
     _fetches_full_data = True
 
+    @property
+    def _expected_columns(self):
+        """Expected output column names (after rename). Used for disk cache schema validation."""
+        result = list(_API_COLUMNS)
+        for old_name, new_name in _COLUMN_RENAME_MAP.items():
+            if old_name in result:
+                result[result.index(old_name)] = new_name
+        return result
+
     def fetch(
         self,
         symbol: str,
@@ -77,7 +124,7 @@ class UsTreasuryFetcher(DataSourceFetcher):
                     f"使用 '{_DEBT_MATURITY_SYMBOL}' 時，必須指定 end 參數（到期截止日期）"
                 )
             try:
-                end_date = datetime.strptime(end, "%Y-%m-%d")
+                end_date = datetime.strptime(end, DATE_FORMAT)
             except (ValueError, TypeError):
                 raise FetchError(
                     f"end 參數格式錯誤，必須為 YYYY-MM-DD，收到: '{end}'"
@@ -85,12 +132,12 @@ class UsTreasuryFetcher(DataSourceFetcher):
             today = datetime.now()
             if end_date <= today:
                 raise FetchError(
-                    f"end 必須晚於今日（{today.strftime('%Y-%m-%d')}），收到: {end}"
+                    f"end 必須晚於今日（{today.strftime(DATE_FORMAT)}），收到: {end}"
                 )
-            start_date = today if not start else datetime.strptime(start, "%Y-%m-%d")
+            start_date = today if not start else datetime.strptime(start, DATE_FORMAT)
             if end_date <= start_date:
                 raise FetchError(
-                    f"end 必須晚於 start（{start_date.strftime('%Y-%m-%d')}），收到: {end}"
+                    f"end 必須晚於 start（{start_date.strftime(DATE_FORMAT)}），收到: {end}"
                 )
             return self._calculate_debt_maturity(start_date, end_date)
 
@@ -182,7 +229,7 @@ class UsTreasuryFetcher(DataSourceFetcher):
         if _debt_maturity_cache is None:
             _debt_maturity_cache = {}
 
-        cache_key = (start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+        cache_key = (start_date.strftime(DATE_FORMAT), end_date.strftime(DATE_FORMAT))
         if cache_key in _debt_maturity_cache:
             cache_date, cache_df = _debt_maturity_cache[cache_key]
             if (datetime.now() - cache_date).days < 1:
@@ -196,7 +243,7 @@ class UsTreasuryFetcher(DataSourceFetcher):
             out_str = r.get("currently_outstanding")
 
             try:
-                mat_date = datetime.strptime(mat_str, "%Y-%m-%d")
+                mat_date = datetime.strptime(mat_str, DATE_FORMAT)
             except (ValueError, TypeError):
                 continue
 
@@ -213,7 +260,7 @@ class UsTreasuryFetcher(DataSourceFetcher):
 
         if not maturing_records:
             raise FetchError(
-                f"在日期範圍「{start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}」內找不到到期的債務資料"
+                f"在日期範圍「{start_date.strftime(DATE_FORMAT)} ~ {end_date.strftime(DATE_FORMAT)}」內找不到到期的債務資料"
             )
 
         from collections import defaultdict
@@ -256,8 +303,8 @@ class UsTreasuryFetcher(DataSourceFetcher):
                 result["T_Bonds"] += out_val
 
         df = pd.DataFrame([result], index=[pd.Timestamp(start_date)])
-        df.attrs["start_date"] = start_date.strftime("%Y-%m-%d")
-        df.attrs["end_date"] = end_date.strftime("%Y-%m-%d")
+        df.attrs["start_date"] = start_date.strftime(DATE_FORMAT)
+        df.attrs["end_date"] = end_date.strftime(DATE_FORMAT)
 
         _debt_maturity_cache[cache_key] = (datetime.now(), df)
         return df
@@ -282,17 +329,8 @@ class UsTreasuryFetcher(DataSourceFetcher):
         df["maturity_date"] = pd.to_datetime(df["maturity_date"])
         df.set_index("issue_date", inplace=True)
 
-        # 轉換數值欄位
-        numeric_cols = [
-            "int_rate",
-            "avg_med_yield",
-            "high_yield",
-            "low_yield",
-            "offering_amount",
-            "total_accepted",
-            "bid_to_cover_ratio",
-        ]
-        for col in numeric_cols:
+        # 轉換數值欄位（從 _API_COLUMNS 自動派生）
+        for col in _get_numeric_columns():
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 

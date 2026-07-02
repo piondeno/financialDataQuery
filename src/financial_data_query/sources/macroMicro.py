@@ -1,10 +1,17 @@
 import json
 import os
+import time
 from pathlib import Path
 
 import pandas as pd
 from financial_data_query.base import DataSourceFetcher
 from financial_data_query.errors import FetchError
+from financial_data_query.browser_utils import (
+    _create_uc_driver,
+    _make_chrome_options,
+    _check_uc_installed,
+)
+from financial_data_query.constants import EPOCH
 
 LINKS_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".macroMicro_links.json")
 README_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "README.md")
@@ -67,11 +74,7 @@ def _parse_title(title: str) -> str:
 
 
 def macroMicroSymbolLinkConnect(url: str) -> None:
-    if not uc:
-        raise FetchError(
-            "undetected-chromedriver 未安裝。"
-            "請執行: pip install financial-data-query[stooq]"
-        )
+    _check_uc_installed("macroMicro")
 
     symbol = _symbol_from_url(url)
     if not symbol:
@@ -79,14 +82,7 @@ def macroMicroSymbolLinkConnect(url: str) -> None:
 
     driver = None
     try:
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        version_main = _get_chrome_version_main()
-        if version_main:
-            driver = uc.Chrome(options=options, version_main=version_main)
-        else:
-            driver = uc.Chrome(options=options)
+        driver = _create_uc_driver(_make_chrome_options())
         driver.get(url)
         time.sleep(3)
         page_title = driver.title
@@ -105,43 +101,20 @@ def macroMicroSymbolLinkConnect(url: str) -> None:
     _update_readme_symbols(links)
 
 
-try:
-    import undetected_chromedriver as uc
-    import time
-    import subprocess
-except ImportError:
-    uc = None
-    time = None
-    subprocess = None
-
-
-def _get_chrome_version_main() -> int | None:
-    """Auto-detect Chrome browser major version from system."""
-    candidates = ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser"]
-    for cmd in candidates:
-        try:
-            out = subprocess.check_output([cmd, "--version"], stderr=subprocess.DEVNULL, text=True)
-            # e.g. "Google Chrome 148.0.7778.96"
-            for part in out.split():
-                if part[0].isdigit():
-                    return int(part.split(".")[0])
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
-            continue
-    return None
-
-
 class MacroMicroFetcher(DataSourceFetcher):
     source_name = "macroMicro"
     _fetches_full_data = True
 
+    def _extract_highcharts_data(self, driver):
+        """Extract data points from Highcharts chart on the page."""
+        return driver.execute_script(
+            "return Highcharts.charts[0].series[0].data.map(function(point) {"
+            "  return {x: point.x, y: point.y};"
+            "});"
+        )
+
     def _create_driver(self):
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        version_main = _get_chrome_version_main()
-        if version_main:
-            return uc.Chrome(options=options, version_main=version_main)
-        return uc.Chrome(options=options)
+        return _create_uc_driver(_make_chrome_options())
 
     def fetch(
         self,
@@ -151,11 +124,7 @@ class MacroMicroFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
-        if not uc:
-            raise FetchError(
-                "undetected-chromedriver 未安裝。"
-                "請執行: pip install financial-data-query[stooq]"
-            )
+        _check_uc_installed("macroMicro")
 
         links = _load_links()
         if symbol not in links:
@@ -168,18 +137,13 @@ class MacroMicroFetcher(DataSourceFetcher):
         try:
             driver.get(url)
             time.sleep(3)
-            data_points = driver.execute_script(
-                "return Highcharts.charts[0].series[0].data.map(function(point) {"
-                "  return {x: point.x, y: point.y};"
-                "});"
-            )
+            data_points = self._extract_highcharts_data(driver)
             if not data_points:
                 raise FetchError("頁面中找不到 Highcharts 圖表資料")
 
-            base_time = pd.Timestamp("1970-01-01", tz="UTC")
             rows = []
             for point in data_points:
-                dt = base_time + pd.Timedelta(milliseconds=point["x"])
+                dt = EPOCH + pd.Timedelta(milliseconds=point["x"])
                 dt_twt = dt.tz_convert("Asia/Taipei").tz_localize(None)
                 rows.append((dt_twt, point["y"]))
 
@@ -202,11 +166,7 @@ class MacroMicroFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> dict[str, pd.DataFrame]:
-        if not uc:
-            raise FetchError(
-                "undetected-chromedriver 未安裝。"
-                "請執行: pip install financial-data-query[stooq]"
-            )
+        _check_uc_installed("macroMicro")
 
         links = _load_links()
         driver = self._create_driver()
@@ -220,18 +180,13 @@ class MacroMicroFetcher(DataSourceFetcher):
                 url = links[symbol]["url"]
                 driver.get(url)
                 time.sleep(3)
-                data_points = driver.execute_script(
-                    "return Highcharts.charts[0].series[0].data.map(function(point) {"
-                    "  return {x: point.x, y: point.y};"
-                    "});"
-                )
+                data_points = self._extract_highcharts_data(driver)
                 if not data_points:
                     raise FetchError(f"頁面中找不到 Highcharts 圖表資料: {url}")
 
-                base_time = pd.Timestamp("1970-01-01", tz="UTC")
                 rows = []
                 for point in data_points:
-                    dt = base_time + pd.Timedelta(milliseconds=point["x"])
+                    dt = EPOCH + pd.Timedelta(milliseconds=point["x"])
                     dt_twt = dt.tz_convert("Asia/Taipei").tz_localize(None)
                     rows.append((dt_twt, point["y"]))
 

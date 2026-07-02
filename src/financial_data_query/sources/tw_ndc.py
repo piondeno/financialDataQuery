@@ -1,11 +1,12 @@
 from abc import ABC
 import io
 import re
-import subprocess
 import time
 import pandas as pd
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, _filter_by_date
+from financial_data_query.constants import MONTH_FORMAT
 from financial_data_query.errors import FetchError
+from financial_data_query.browser_utils import _create_uc_driver, _make_chrome_options, _check_uc_installed
 
 try:
     import undetected_chromedriver as uc
@@ -19,20 +20,6 @@ except ImportError:
     WebDriverWait = None
     EC = None
     Keys = None
-
-
-def _get_chrome_version_main() -> int | None:
-    """Auto-detect Chrome browser major version from system."""
-    candidates = ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser"]
-    for cmd in candidates:
-        try:
-            out = subprocess.check_output([cmd, "--version"], stderr=subprocess.DEVNULL, text=True)
-            for part in out.split():
-                if part[0].isdigit():
-                    return int(part.split(".")[0])
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
-            continue
-    return None
 
 
 class NdcFetcher(DataSourceFetcher, ABC):
@@ -62,7 +49,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
         first_col = df.columns[0]
         df[first_col] = df[first_col].astype(str).str.strip()
         df = df[df[first_col] != ""]
-        df[first_col] = pd.to_datetime(df[first_col], format="%Y-%m", errors="coerce")
+        df[first_col] = pd.to_datetime(df[first_col], format=MONTH_FORMAT, errors="coerce")
         df[first_col] = df[first_col] + pd.offsets.MonthEnd(0)
         df = df.dropna(subset=[first_col])
         df.set_index(first_col, inplace=True)
@@ -82,10 +69,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
                 )
             df = df[[symbol]]
 
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
+        df = _filter_by_date(df, start, end)
 
         return df
 
@@ -138,13 +122,8 @@ class NdcFetcher(DataSourceFetcher, ABC):
         raise FetchError("找不到包含資料的表格")
 
     def _create_driver(self):
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        version_main = _get_chrome_version_main()
-        if version_main:
-            return uc.Chrome(options=options, version_main=version_main)
-        return uc.Chrome(options=options)
+        options = _make_chrome_options()
+        return _create_uc_driver(options)
 
     def _get_full_table(self) -> pd.DataFrame:
         driver = self._create_driver()
@@ -174,11 +153,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
-        if not uc:
-            raise FetchError(
-                "undetected-chromedriver 未安裝。"
-                "請執行: pip install financial-data-query[stooq]"
-            )
+        _check_uc_installed(self.source_name)
         df_full = self._get_full_table_cached()
         if symbol not in df_full.columns:
             raise FetchError(
@@ -186,10 +161,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
             )
         df = df_full[[symbol]].copy()
         df = df.rename(columns={symbol: "value"})
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
+        df = _filter_by_date(df, start, end)
         return df
 
     def batch_fetch(
@@ -200,11 +172,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> dict[str, pd.DataFrame]:
-        if not uc:
-            raise FetchError(
-                "undetected-chromedriver 未安裝。"
-                "請執行: pip install financial-data-query[stooq]"
-            )
+        _check_uc_installed(self.source_name)
         df_full = self._get_full_table_cached()
         results = {}
         for symbol in symbols:
@@ -214,10 +182,7 @@ class NdcFetcher(DataSourceFetcher, ABC):
                 )
             df = df_full[[symbol]].copy()
             df = df.rename(columns={symbol: "value"})
-            if start:
-                df = df[df.index >= pd.Timestamp(start)]
-            if end:
-                df = df[df.index <= pd.Timestamp(end)]
+            df = _filter_by_date(df, start, end)
             results[symbol] = df
         return results
 

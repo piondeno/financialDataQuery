@@ -1,12 +1,12 @@
 import pandas as pd
 import io
-import subprocess
 import time
 import os
 import glob
 import re
 from financial_data_query.base import DataSourceFetcher
 from financial_data_query.errors import FetchError
+from financial_data_query.browser_utils import _create_uc_driver, _make_chrome_options
 
 try:
     import undetected_chromedriver as uc
@@ -20,20 +20,7 @@ except ImportError:
     Select = None
     EC = None
 
-
-def _get_chrome_version_main() -> int | None:
-    """Auto-detect Chrome browser major version from system."""
-    candidates = ["google-chrome", "google-chrome-stable", "google-chrome-beta", "chromium", "chromium-browser"]
-    for cmd in candidates:
-        try:
-            out = subprocess.check_output([cmd, "--version"], stderr=subprocess.DEVNULL, text=True)
-            for part in out.split():
-                if part[0].isdigit():
-                    return int(part.split(".")[0])
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
-            continue
-    return None
-
+# Yahoo interval -> Stooq value mapping (keys overlap with Yahoo intervals)
 _FREQUENCY_TO_VALUE = {
     "1d": "d",
     "1wk": "w",
@@ -219,9 +206,7 @@ class StooqFetcher(DataSourceFetcher):
         download_dir = os.path.join(os.path.dirname(__file__), ".downloads")
         os.makedirs(download_dir, exist_ok=True)
 
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+        options = _make_chrome_options()
         prefs = {
             "download.default_directory": download_dir,
             "download.prompt_for_download": False,
@@ -229,10 +214,7 @@ class StooqFetcher(DataSourceFetcher):
             "safebrowsing.enabled": True,
         }
         options.add_experimental_option("prefs", prefs)
-        version_main = _get_chrome_version_main()
-        if version_main:
-            return uc.Chrome(options=options, version_main=version_main)
-        return uc.Chrome(options=options)
+        return _create_uc_driver(options)
 
     def _fetch_with_driver(
         self,

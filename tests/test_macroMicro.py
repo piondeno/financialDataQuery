@@ -115,7 +115,8 @@ class TestParseTitle:
 
 class TestMacroMicroSymbolLinkConnect:
     def test_missing_dependency_raises(self, tmp_path):
-        with patch("financial_data_query.sources.macroMicro.uc", None):
+        with patch("financial_data_query.sources.macroMicro._check_uc_installed",
+                   side_effect=FetchError("undetected-chromedriver 未安裝")):
             with pytest.raises(FetchError, match="undetected-chromedriver"):
                 macroMicroSymbolLinkConnect("https://www.macromicro.me/series/5899/cn-dr007")
 
@@ -127,10 +128,8 @@ class TestMacroMicroSymbolLinkConnect:
 
         mock_driver = MagicMock()
         mock_driver.title = "中國-逆回購利率(日數據)-7天期 - MacroMicro"
-        mock_uc = MagicMock()
-        mock_uc.Chrome.return_value = mock_driver
 
-        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+        with patch("financial_data_query.sources.macroMicro._create_uc_driver", return_value=mock_driver):
             with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
                 with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
                     with patch("time.sleep"):
@@ -150,10 +149,8 @@ class TestMacroMicroSymbolLinkConnect:
 
         mock_driver = MagicMock()
         mock_driver.title = "Test Symbol - MacroMicro"
-        mock_uc = MagicMock()
-        mock_uc.Chrome.return_value = mock_driver
 
-        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
+        with patch("financial_data_query.sources.macroMicro._create_uc_driver", return_value=mock_driver):
             with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
                 with patch("financial_data_query.sources.macroMicro.README_PATH", readme_file):
                     with patch("time.sleep"):
@@ -172,7 +169,8 @@ class TestMacroMicroFetcher:
         json_file = str(tmp_path / ".macroMicro_links.json")
         with open(json_file, "w") as f:
             json.dump({"sym1": {"url": "http://a.com", "description": "T"}}, f)
-        with patch("financial_data_query.sources.macroMicro.uc", None):
+        with patch("financial_data_query.sources.macroMicro._check_uc_installed",
+                   side_effect=FetchError("undetected-chromedriver 未安裝")):
             with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
                 fetcher = MacroMicroFetcher()
                 with pytest.raises(FetchError, match="undetected-chromedriver"):
@@ -197,11 +195,9 @@ class TestMacroMicroFetcher:
             {"x": 1704153600000, "y": 1.8},
             {"x": 1704240000000, "y": 1.9}
         ]
-        mock_uc = MagicMock()
-        mock_uc.Chrome.return_value = mock_driver
 
-        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
-            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            with patch.object(MacroMicroFetcher, "_create_driver", return_value=mock_driver):
                 with patch("time.sleep"):
                     fetcher = MacroMicroFetcher()
                     df = fetcher.fetch("sym1")
@@ -224,17 +220,15 @@ class TestMacroMicroBatchFetch:
         mock_driver.execute_script.return_value = [
             {"x": 1704153600000, "y": 1.0}
         ]
-        mock_uc = MagicMock()
-        mock_uc.Chrome.return_value = mock_driver
 
-        with patch("financial_data_query.sources.macroMicro.uc", mock_uc):
-            with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+        with patch("financial_data_query.sources.macroMicro.LINKS_FILE_PATH", json_file):
+            with patch.object(MacroMicroFetcher, "_create_driver", return_value=mock_driver) as mock_create:
                 with patch("time.sleep"):
                     fetcher = MacroMicroFetcher()
                     results = fetcher.batch_fetch(["sym1", "sym2"])
         assert "sym1" in results
         assert "sym2" in results
-        assert mock_uc.Chrome.call_count == 1
+        assert mock_create.call_count == 1
         assert mock_driver.get.call_count == 2
 
 

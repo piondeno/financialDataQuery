@@ -1,8 +1,7 @@
-import time
-
 import pandas as pd
 import akshare as ak
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, _filter_by_date, _retry_fetch
+from financial_data_query.constants import AKSHARE_DEFAULT_START, AKSHARE_DEFAULT_END
 from financial_data_query.errors import FetchError
 
 
@@ -19,7 +18,6 @@ _ASHARE_COLUMN_MAP = {
     "turnover_rate": "换手率",
 }
 
-_REVERSE_COLUMN_MAP = {v: k for k, v in _ASHARE_COLUMN_MAP.items()}
 
 _SPECIAL_SYMBOLS = {
     "bdi": "macro_shipping_bdi",
@@ -54,33 +52,20 @@ class AkShareFetcher(DataSourceFetcher):
         if symbol.lower() in _PMI_SYMBOLS:
             func_name = _PMI_SYMBOLS[symbol.lower()]
             ak_func = getattr(ak, func_name)
-            df = self._retry_fetch(lambda: ak_func(), max_retries=3)
+            df = _retry_fetch(lambda: ak_func(), max_retries=3)
             return self._process_pmi_df(df, symbol, sub_field=sub_field, start=start, end=end, frequency=frequency)
 
-        last_exc = None
-        for attempt in range(3):
-            if attempt > 0:
-                time.sleep(min(attempt * 2, 10))
-            try:
-                start_date = self._normalize_date(start) if start else "19700101"
-                end_date = self._normalize_date(end) if end else "20500101"
+        start_date = self._normalize_date(start) if start else AKSHARE_DEFAULT_START
+        end_date = self._normalize_date(end) if end else AKSHARE_DEFAULT_END
+        period_map = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}
+        period = period_map.get(frequency, "daily") if frequency else "daily"
 
-                period_map = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}
-                period = period_map.get(frequency, "daily") if frequency else "daily"
-
-                df = ak.stock_zh_a_hist(
-                    symbol=symbol,
-                    period=period,
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="",
-                )
-                break
-
-            except Exception as e:
-                last_exc = e
-        else:
-            raise FetchError(f"Failed to fetch AKShare data for '{symbol}': {last_exc}") from last_exc
+        df = _retry_fetch(
+            lambda: ak.stock_zh_a_hist(
+                symbol=symbol, period=period, start_date=start_date, end_date=end_date, adjust=""
+            ),
+            max_retries=3,
+        )
 
         if df is None or df.empty:
             raise FetchError(f"No data returned for AKShare symbol '{symbol}'")
@@ -135,17 +120,8 @@ class AkShareFetcher(DataSourceFetcher):
         frequency: str | None = None,
     ) -> pd.DataFrame:
         """Fetch special symbols (BDI, WCI) from akshare."""
-        last_exc = None
-        for attempt in range(3):
-            if attempt > 0:
-                time.sleep(min(attempt * 2, 10))
-            try:
-                df = getattr(ak, ak_func_name)()
-                break
-            except Exception as e:
-                last_exc = e
-        else:
-            raise FetchError(f"Failed to fetch {ak_func_name} data: {last_exc}") from last_exc
+        ak_func = getattr(ak, ak_func_name)
+        df = _retry_fetch(lambda: ak_func(), max_retries=3)
 
         if df is None or df.empty:
             raise FetchError(f"No data returned for {ak_func_name}")
@@ -168,7 +144,7 @@ class AkShareFetcher(DataSourceFetcher):
 
         # Apply date filtering
         if start or end:
-            df = self._filter_by_date_bdi(df, start, end)
+            df = _filter_by_date(df, start, end)
 
         # Handle weekly/monthly frequency for BDI (WCI is already weekly)
         if frequency and frequency.lower() in ("monthly",) and ak_func_name == "macro_shipping_bdi":
@@ -182,87 +158,16 @@ class AkShareFetcher(DataSourceFetcher):
 
         return df
 
-    def _fetch_bdi(
-        self,
-        start: str | None = None,
-        end: str | None = None,
-        sub_field: str | None = None,
-        frequency: str | None = None,
-    ) -> pd.DataFrame:
-        last_exc = None
-        for attempt in range(3):
-            if attempt > 0:
-                time.sleep(min(attempt * 2, 10))
-            try:
-                df = ak.macro_shipping_bdi()
-                break
-            except Exception as e:
-                last_exc = e
-        else:
-            raise FetchError(f"Failed to fetch BDI data: {last_exc}") from last_exc
-
-        if df is None or df.empty:
-            raise FetchError("No BDI data returned")
-
-        df["日期"] = pd.to_datetime(df["日期"])
-        df.set_index("日期", inplace=True)
-        df.sort_index(inplace=True)
-
-        rename_map = {"最新值": "value"}
-        if "最新值" in df.columns:
-            df.rename(columns=rename_map, inplace=True)
-        else:
-            df.columns = ["value"] if len(df.columns) == 1 else df.columns
-
-        if sub_field and sub_field.lower() != "value":
-            available = [c for c in df.columns]
-            raise FetchError(
-                f"Invalid sub_field '{sub_field}' for BDI. Available: {', '.join(available)}"
-            )
-
-        if start or end:
-            df = self._filter_by_date_bdi(df, start, end)
-
-        if frequency and frequency.lower() in ("weekly", "monthly"):
-            freq_alias = "W" if frequency.lower() == "weekly" else "ME"
-            value_col = "value"
-            pct_cols = [c for c in df.columns if "涨跌幅" in str(c)]
-            agg_dict = {value_col: "mean"}
-            for col in pct_cols:
-                agg_dict[col] = lambda x: x.iloc[-1] if len(x) else None
-            df = df.resample(freq_alias).agg(agg_dict).dropna()
-            df.index.name = "日期"
-
-        return df
-
-    @staticmethod
-    def _filter_by_date_bdi(df: pd.DataFrame, start: str | None, end: str | None) -> pd.DataFrame:
-        if not (start or end):
-            return df
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
-        return df.sort_index()
-
-    def _retry_fetch(self, fetch_func, max_retries=3):
-        """Retry a fetch function with exponential backoff."""
-        last_exc = None
-        for attempt in range(max_retries):
-            if attempt > 0:
-                time.sleep(min(attempt * 2, 10))
-            try:
-                return fetch_func()
-            except Exception as e:
-                last_exc = e
-        raise FetchError(f"Failed after {max_retries} retries: {last_exc}") from last_exc
-
     def _process_pmi_df(self, df: pd.DataFrame, symbol_key: str,
                         sub_field: str | None = None, start: str | None = None,
                         end: str | None = None, frequency: str | None = None) -> pd.DataFrame:
         """Process and normalize PMI DataFrame from akshare."""
         if df is None or df.empty:
             raise FetchError(f"No PMI data returned for '{symbol_key}'")
+
+        # Apply date filtering
+        if start or end:
+            df = _filter_by_date(df, start, end)
 
         # Normalize column names to English equivalents
         col_rename = {}
@@ -296,9 +201,5 @@ class AkShareFetcher(DataSourceFetcher):
                 f"Invalid sub_field '{sub_field}' for {symbol_key}. "
                 f"Available fields: {', '.join(sorted(available_cols))}"
             )
-
-        # Apply date filtering
-        if start or end:
-            df = self._filter_by_date_bdi(df, start, end)
 
         return df

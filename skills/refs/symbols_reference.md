@@ -119,8 +119,10 @@
 | PMI 子項目 | `ism-manufacturing-neworders` | ISM 製造業 PMI - 新訂單指數 (1948-至今) |
 | PMI 子項目 | `ism-manufacturing-customersinventories` | ISM 製造業 PMI - 客戶存貨指數 (1997-至今) |
 | PMI 子項目 | `ism-manufacturing-supplierdeliveries` | ISM 製造業 PMI - 供應商交貨指數 (1985-至今) |
+| PMI 子項目 | `ism-manufacturing-backlogoforders` | ISM 製造業 PMI - 未完成訂單指數 (1993-至今) |
 | 信用風險 | `us-5year-cds` | 美國 5年信用違約交換 (CDS) |
 | 房地產 | `us-new-tenant-rent-index` | 美國新租客租金指數 (季頻，2005-至今) |
+| 存貨 | `tw-inventories-sales-ratio-manufacturing` | 台灣製造業存貨率 (半年頻，1982-至今) |
 
 
 ---
@@ -181,7 +183,7 @@
 
 ## 資料源：`ici`
 
-美國投資公司協會 (ICI) 每週基金資金流量數據。
+美國投資公司協會 (ICI) 基金資金流量數據。MF/ETF/Combined 為每週數據（2024-01 至今），MMF 為每月數據（2013-01 至今）。
 
 ### 共同基金 (Mutual Fund)
 
@@ -235,6 +237,92 @@
 | 債券型 - 應稅 | `combined_bond_taxable` | 應稅債券型 |
 | 債券型 - 市政債 | `combined_bond_municipal` | 市政工程債 |
 | 大宗商品 | `combined_commodity` | 商品基金 |
+
+### 貨幣市場基金 - 政府基金 (MMF Government Funds)
+
+| 類別 | 代號 | 中文說明 |
+|------|------|---------|
+| 總計 | `mmf_gov_total` | 總投資組合證券 |
+| 公債 | `mmf_gov_treasury` | 美國公債 |
+| 公債 | `mmf_gov_agency` | 政府機構債務 |
+| 回購 | `mmf_gov_repo_total` | 回購協議合計 |
+| 回購 | `mmf_gov_repo_agency` | 政府機構回購 |
+| 回購 | `mmf_gov_repo_treasury` | 公債回購 |
+| 回購 | `mmf_gov_repo_other` | 其他回購 |
+| 定存 | `mmf_gov_cdp` | 存單 |
+| 定存 | `mmf_gov_ntd` | 不可議轉定期存款（2016-04 起） |
+| 本票 | `mmf_gov_cp_total` | 商業本票合計 |
+| 本票 | `mmf_gov_cp_assetbacked` | 資產支持本票 |
+| 本票 | `mmf_gov_cp_financial` | 金融公司本票 |
+| 本票 | `mmf_gov_cp_nonfinancial` | 非金融公司本票 |
+| 其他 | `mmf_gov_otherabs` | 其他資產支持證券（2016-04 起） |
+| 市政債 | `mmf_gov_muni_total` | 市政債務合計 |
+| 市政債 | `mmf_gov_muni_vrdn` | 浮動利率需求票據 |
+| 市政債 | `mmf_gov_muni_other` | 其他市政證券 |
+| 其他 | `mmf_gov_tob` | 認購選擇權債券（2016-04 起） |
+| 其他 | `mmf_gov_other_instrument` | 其他工具 |
+| 其他 | `mmf_gov_icfa` | 保險公司資金協議 |
+| 其他 | `mmf_gov_inv_company` | 投資公司 |
+| 其他 | `mmf_gov_nonus_sov` | 非美國主權債務（2016-04 起） |
+| 其他 | `mmf_gov_other_note` | 其他票據（僅至 2016-03） |
+| 指標 | `mmf_gov_wam` | 加權平均到期日 |
+| 指標 | `mmf_gov_wal` | 加權平均存續期 |
+
+### 貨幣市場基金 - 優質基金 (MMF Prime Funds)
+
+| 類別 | 代號 | 中文說明 |
+|------|------|---------|
+| 總計 | `mmf_prime_total` | 總投資組合證券 |
+| 公債 | `mmf_prime_treasury` | 美國公債 |
+| 公債 | `mmf_prime_agency` | 政府機構債務 |
+| 回購 | `mmf_prime_repo_total` | 回購協議合計 |
+| 回購 | `mmf_prime_repo_agency` | 政府機構回購 |
+| 回購 | `mmf_prime_repo_treasury` | 公債回購 |
+| 回購 | `mmf_prime_repo_other` | 其他回購 |
+| 定存 | `mmf_prime_cdp` | 存單 |
+| 定存 | `mmf_prime_ntd` | 不可議轉定期存款（2016-04 起） |
+| 本票 | `mmf_prime_cp_total` | 商業本票合計 |
+| 本票 | `mmf_prime_cp_assetbacked` | 資產支持本票 |
+| 本票 | `mmf_prime_cp_financial` | 金融公司本票 |
+| 本票 | `mmf_prime_cp_nonfinancial` | 非金融公司本票 |
+| 其他 | `mmf_prime_otherabs` | 其他資產支持證券（2016-04 起） |
+| 市政債 | `mmf_prime_muni_total` | 市政債務合計 |
+| 市政債 | `mmf_prime_muni_vrdn` | 浮動利率需求票據 |
+| 市政債 | `mmf_prime_muni_other` | 其他市政證券 |
+| 其他 | `mmf_prime_tob` | 認購選擇權債券（2016-04 起） |
+| 其他 | `mmf_prime_other_instrument` | 其他工具 |
+| 其他 | `mmf_prime_icfa` | 保險公司資金協議 |
+| 其他 | `mmf_prime_inv_company` | 投資公司 |
+| 其他 | `mmf_prime_nonus_sov` | 非美國主權債務（2016-04 起） |
+| 其他 | `mmf_prime_other_note` | 其他票據（僅至 2016-03） |
+| 指標 | `mmf_prime_wam` | 加權平均到期日 |
+| 指標 | `mmf_prime_wal` | 加權平均存續期 |
+
+### 貨幣市場基金 - 免稅基金 (MMF Tax Exempt Funds)
+
+| 類別 | 代號 | 中文說明 |
+|------|------|---------|
+| 總計 | `mmf_taxexempt_total` | 總投資組合證券 |
+| 公債 | `mmf_taxexempt_treasury` | 美國公債 |
+| 公債 | `mmf_taxexempt_agency` | 政府機構債務 |
+| 回購 | `mmf_taxexempt_repo_total` | 回購協議合計 |
+| 回購 | `mmf_taxexempt_repo_agency` | 政府機構回購 |
+| 回購 | `mmf_taxexempt_repo_treasury` | 公債回購 |
+| 回購 | `mmf_taxexempt_repo_other` | 其他回購 |
+| 定存 | `mmf_taxexempt_cdp` | 存單 |
+| 本票 | `mmf_taxexempt_cp_total` | 商業本票合計 |
+| 本票 | `mmf_taxexempt_cp_assetbacked` | 資產支持本票 |
+| 本票 | `mmf_taxexempt_cp_financial` | 金融公司本票 |
+| 本票 | `mmf_taxexempt_cp_nonfinancial` | 非金融公司本票 |
+| 市政債 | `mmf_taxexempt_muni_total` | 市政債務合計 |
+| 市政債 | `mmf_taxexempt_muni_vrdn` | 浮動利率需求票據 |
+| 市政債 | `mmf_taxexempt_muni_other` | 其他市政證券 |
+| 其他 | `mmf_taxexempt_other_instrument` | 其他工具 |
+| 其他 | `mmf_taxexempt_inv_company` | 投資公司 |
+| 其他 | `mmf_taxexempt_tob` | 認購選擇權債券（2016-04 起） |
+| 其他 | `mmf_taxexempt_other_note` | 其他票據（僅至 2016-03） |
+| 指標 | `mmf_taxexempt_wam` | 加權平均到期日 |
+| 指標 | `mmf_taxexempt_wal` | 加權平均存續期 |
 
 呼叫格式：`{"source":"ici","symbols":["mf_total"]}`
 

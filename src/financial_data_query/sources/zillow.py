@@ -32,6 +32,7 @@ _METADATA_COLS = ["RegionID", "SizeRank", "RegionName", "RegionType", "StateName
 
 class ZillowFetcher(DataSourceFetcher):
     source_name = "zillow"
+    _fetches_full_data = True
 
     def _download_csv(self, url: str) -> pd.DataFrame:
         ts = int(time.time())
@@ -92,15 +93,5 @@ class ZillowFetcher(DataSourceFetcher):
 
         index = pd.to_datetime(date_cols)
         result = pd.DataFrame(dict(zip(col_names, records)), index=index)
-
-        if start:
-            result = result[result.index >= pd.Timestamp(start)]
-        if end:
-            result = result[result.index <= pd.Timestamp(end)]
-
-        if result.empty:
-            raise FetchError(
-                f"No data for '{sym}' in the given date range ({start} to {end})"
-            )
 
         return result

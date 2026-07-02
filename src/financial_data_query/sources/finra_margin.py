@@ -1,8 +1,8 @@
-import tempfile
 import time
 import urllib.request
 import pandas as pd
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, validate_symbol, _cleanup_file
+from financial_data_query.constants import MONTH_FORMAT
 from financial_data_query.errors import FetchError
 
 
@@ -38,7 +38,7 @@ class FinraMarginFetcher(DataSourceFetcher):
             urllib.request.urlretrieve(_FINRA_URL, tmp_path)
             df = pd.read_excel(tmp_path, sheet_name=_SHEET_NAME, engine="openpyxl")
             df["Year-Month"] = (
-                pd.to_datetime(df["Year-Month"], format="%Y-%m")
+                pd.to_datetime(df["Year-Month"], format=MONTH_FORMAT)
                 + pd.offsets.MonthEnd(0)
             )
             df.set_index("Year-Month", inplace=True)
@@ -56,11 +56,7 @@ class FinraMarginFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
-        if symbol not in _SYMBOL_MAP:
-            raise FetchError(
-                f"Invalid symbol '{symbol}'. "
-                f"Must be one of: {', '.join(sorted(_SYMBOL_MAP.keys()))}"
-            )
+        validate_symbol(symbol, _SYMBOL_MAP, self.source_name)
 
         try:
             df = self._get_full_df()
@@ -78,13 +74,5 @@ class FinraMarginFetcher(DataSourceFetcher):
             raise FetchError(f"FINRA margin fetch failed: {e}") from e
         finally:
             if self._tmp_path_cache:
-                self._cleanup_file(self._tmp_path_cache)
+                _cleanup_file(self._tmp_path_cache)
                 self._tmp_path_cache = None
-
-    @staticmethod
-    def _cleanup_file(path: str) -> None:
-        try:
-            import os
-            os.unlink(path)
-        except OSError:
-            pass

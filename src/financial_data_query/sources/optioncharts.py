@@ -8,9 +8,19 @@ from financial_data_query.errors import FetchError
 
 _OPTIONCHARTS_API_URL = "https://optioncharts.io/async/option_history_table"
 
+# 輸出欄位清單：同時用於數值轉換和欄位過濾
+_OPTIONCHARTS_OUTPUT_COLS = [
+    "Close Price",
+    "Option Volume Total",
+    "Option Volume Put-Call Ratio",
+    "OI Total",
+    "OI Put-Call Ratio",
+]
+
 
 class OptionchartsFetcher(DataSourceFetcher):
     source_name = "optioncharts"
+    _fetches_full_data = True
 
     def _fetch_raw(self, symbol: str) -> dict:
         params = {
@@ -78,14 +88,7 @@ class OptionchartsFetcher(DataSourceFetcher):
         df["Date"] = pd.to_datetime(df["Date"])
         df.set_index("Date", inplace=True)
 
-        numeric_cols = [
-            "Close Price",
-            "Option Volume Total",
-            "Option Volume Put-Call Ratio",
-            "OI Total",
-            "OI Put-Call Ratio",
-        ]
-        for col in numeric_cols:
+        for col in _OPTIONCHARTS_OUTPUT_COLS:
             if col in df.columns:
                 df[col] = df[col].apply(self._extract_main_value)
                 df[col] = pd.to_numeric(df[col].str.replace(",", "").str.replace("M", "e6").str.replace("K", "e3"), errors="coerce")
@@ -96,14 +99,7 @@ class OptionchartsFetcher(DataSourceFetcher):
             else:
                 raise FetchError(f"Sub-field '{sub_field}' not found. Available: {list(df.columns)}")
 
-        available_cols = [
-            "Close Price",
-            "Option Volume Total",
-            "Option Volume Put-Call Ratio",
-            "OI Total",
-            "OI Put-Call Ratio",
-        ]
-        df = df[[col for col in available_cols if col in df.columns]]
+        df = df[[col for col in _OPTIONCHARTS_OUTPUT_COLS if col in df.columns]]
         df.sort_index(inplace=True)
 
         if frequency and frequency.lower() in ("weekly", "monthly", "quarterly"):

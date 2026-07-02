@@ -1,6 +1,7 @@
 import pandas as pd
 import yfinance as yf
 from financial_data_query.base import DataSourceFetcher
+from financial_data_query.constants import FREQUENCY_YAHOO_INTERVALS
 from financial_data_query.errors import FetchError
 
 
@@ -16,12 +17,7 @@ _YAHOO_COLUMN_MAP = {
 
 class YahooFetcher(DataSourceFetcher):
     source_name = "yahoo"
-
-    _FREQUENCY_MAP = {
-        "daily": "1d",
-        "weekly": "1wk",
-        "monthly": "1mo",
-    }
+    _FREQUENCY_MAP = FREQUENCY_YAHOO_INTERVALS
 
     def fetch(
         self,

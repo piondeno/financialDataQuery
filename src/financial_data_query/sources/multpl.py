@@ -2,7 +2,7 @@ import io
 
 import pandas as pd
 import requests
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, validate_symbol
 from financial_data_query.errors import FetchError
 
 
@@ -21,6 +21,7 @@ _SYMBOL_MAP = {
 
 class MultplFetcher(DataSourceFetcher):
     source_name = "multpl"
+    _fetches_full_data = True
 
     def fetch(
         self,
@@ -30,11 +31,7 @@ class MultplFetcher(DataSourceFetcher):
         sub_field: str | None = None,
         frequency: str | None = None,
     ) -> pd.DataFrame:
-        if symbol not in _SYMBOL_MAP:
-            raise FetchError(
-                f"Invalid symbol '{symbol}'. "
-                f"Must be one of: {', '.join(sorted(_SYMBOL_MAP.keys()))}"
-            )
+        validate_symbol(symbol, _SYMBOL_MAP, self.source_name)
 
         url = f"{_BASE_URL}/{_SYMBOL_MAP[symbol]}"
         try:
@@ -65,16 +62,6 @@ class MultplFetcher(DataSourceFetcher):
         df["value"] = pd.to_numeric(value_str.str.rstrip("%"), errors="coerce")
         df = df.dropna(subset=["value"])
 
-        if start:
-            df = df[df.index >= pd.Timestamp(start)]
-        if end:
-            df = df[df.index <= pd.Timestamp(end)]
-
         df = df.sort_index()
-
-        if df.empty:
-            raise FetchError(
-                f"No data for '{symbol}' in the given date range"
-            )
 
         return df

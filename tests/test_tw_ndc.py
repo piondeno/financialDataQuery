@@ -128,7 +128,10 @@ class TestNdcRegistration:
 class TestNdcFetchFlow:
     @pytest.fixture
     def fetcher(self):
-        return TwEcoFetcher()
+        fetcher = TwEcoFetcher()
+        # Clear class-level cache to avoid interference between tests
+        NdcFetcher._full_table_cache.clear()
+        return fetcher
 
     def test_fetch_calls_driver_methods(self, fetcher):
         mock_driver = mock.MagicMock()
@@ -139,8 +142,8 @@ class TestNdcFetchFlow:
         </table>
         """
 
-        with mock.patch("financial_data_query.sources.tw_ndc.uc", mock.MagicMock()):
-            with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+        with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+            with mock.patch("time.sleep"):
                 with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
                     with mock.patch.object(fetcher, "_interact_page", return_value=mock_driver.page_source):
                         result = fetcher.fetch("擴散指數")
@@ -161,8 +164,8 @@ class TestNdcFetchFlow:
         </table>
         """
 
-        with mock.patch("financial_data_query.sources.tw_ndc.uc", mock.MagicMock()):
-            with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+        with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+            with mock.patch("time.sleep"):
                 with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
                     with mock.patch.object(fetcher, "_interact_page", return_value=mock_driver.page_source):
                         result = fetcher.fetch("擴散指數", start="2024-01-01", end="2024-10-31")
@@ -174,8 +177,8 @@ class TestNdcFetchFlow:
         mock_driver = mock.MagicMock()
         mock_driver.page_source = "<html><body>No table here</body></html>"
 
-        with mock.patch("financial_data_query.sources.tw_ndc.uc", mock.MagicMock()):
-            with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+        with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
+            with mock.patch("time.sleep"):
                 with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
                     with mock.patch.object(fetcher, "_interact_page", return_value=mock_driver.page_source):
                         with pytest.raises(FetchError):
@@ -185,15 +188,15 @@ class TestNdcFetchFlow:
         mock_driver = mock.MagicMock()
         mock_driver.get.side_effect = Exception("Connection failed")
 
-        with mock.patch("financial_data_query.sources.tw_ndc.uc", mock.MagicMock()):
+        with mock.patch("financial_data_query.sources.tw_ndc.WebDriverWait", mock.MagicMock()):
             with mock.patch.object(fetcher, "_create_driver", return_value=mock_driver):
                 with pytest.raises(FetchError):
                     fetcher.fetch("擴散指數")
 
         mock_driver.quit.assert_called_once()
 
-    def test_fetch_missing_dependency_raises(self):
-        with mock.patch("financial_data_query.sources.tw_ndc.uc", None):
-            fetcher = TwEcoFetcher()
+    def test_fetch_missing_dependency_raises(self, fetcher):
+        with mock.patch("financial_data_query.sources.tw_ndc._check_uc_installed",
+                        side_effect=FetchError("undetected-chromedriver 未安裝")):
             with pytest.raises(FetchError, match="undetected-chromedriver"):
                 fetcher.fetch("擴散指數")

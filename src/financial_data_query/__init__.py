@@ -3,12 +3,18 @@ import pandas as pd
 from financial_data_query.config import load_env
 from financial_data_query.registry import Registry
 from financial_data_query.cache import QueryCache
-from financial_data_query.base import DataSourceFetcher
+from financial_data_query.base import DataSourceFetcher, _filter_by_date
 from financial_data_query.disk_cache import DiskCache
+from financial_data_query.constants import (
+    DATE_FORMAT,
+    _DEFAULT_CACHE_SIZE,
+    _DAILY_THRESHOLD_DAYS,
+    _WEEKLY_THRESHOLD_DAYS,
+)
 
 load_env()
 
-_cache = QueryCache(max_size=128)
+_cache = QueryCache(max_size=_DEFAULT_CACHE_SIZE)
 _disk_cache = DiskCache()
 
 _FREQUENCY_AWARE_SOURCES = {"yahoo", "stooq"}
@@ -38,7 +44,7 @@ def _get_batch_cache(fetcher, source):
 
 def _set_batch_cache(fetcher, source, df):
     """Store full table in the fetcher's batch cache."""
-    for attr in ('_full_table_cache', '_full_data_cache', '_full_df_cache'):
+    for attr in _BATCH_CACHE_ATTRS:
         cache = getattr(fetcher, attr, None)
         if hasattr(cache, '__setitem__'):  # dict-like
             cache[source] = df
@@ -62,9 +68,9 @@ def _auto_frequency(
         return "daily"
 
     days = delta.days
-    if days <= 365:
+    if days <= _DAILY_THRESHOLD_DAYS:
         return "daily"
-    elif days <= 1825:
+    elif days <= _WEEKLY_THRESHOLD_DAYS:
         return "weekly"
     else:
         return "monthly"
@@ -82,27 +88,8 @@ def _df_to_json(df: pd.DataFrame) -> list[dict]:
     for record in records:
         for k, v in record.items():
             if isinstance(v, pd.Timestamp):
-                record[k] = v.strftime("%Y-%m-%d")
+                record[k] = v.strftime(DATE_FORMAT)
     return records
-
-
-def _filter_by_date(df: pd.DataFrame, start: str | None, end: str | None) -> pd.DataFrame:
-    if df is None or len(df) == 0:
-        return df
-    if not (start or end):
-        return df
-    # Normalize index: ensure DatetimeIndex, drop tz (compare against naive Timestamps)
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df = df.copy()
-        df.index = pd.to_datetime(df.index, errors="coerce")
-    if getattr(df.index, "tz", None) is not None:
-        df = df.copy()
-        df.index = df.index.tz_localize(None)
-    if start:
-        df = df[df.index >= pd.Timestamp(start)]
-    if end:
-        df = df[df.index <= pd.Timestamp(end)]
-    return df
 
 
 def query(
@@ -133,14 +120,11 @@ def query(
     _import_sources()
     fetcher = Registry.get(source)
 
-    if isinstance(symbol, list):
-        return _batch_query(
-            fetcher, source, symbol, start, end, sub_field, frequency, output, use_cache
-        )
-    else:
-        return _single_query(
-            fetcher, source, symbol, start, end, sub_field, frequency, output, use_cache
-        )
+    symbols = symbol if isinstance(symbol, list) else [symbol]
+    results = _batch_query(
+        fetcher, source, symbols, start, end, sub_field, frequency, output, use_cache, is_single=(not isinstance(symbol, list))
+    )
+    return results
 
 
 def _apply_sub_field(df: pd.DataFrame, sub_field: str | None) -> pd.DataFrame:
@@ -149,129 +133,8 @@ def _apply_sub_field(df: pd.DataFrame, sub_field: str | None) -> pd.DataFrame:
     return df[[sub_field]]
 
 
-def _single_query(
-    fetcher, source, symbol, start, end, sub_field, frequency, output, use_cache
-):
-    effective_freq = _auto_frequency(source, start, end, frequency)
-
-    if use_cache:
-        cached = _cache.get(source, symbol, start, end, sub_field, effective_freq)
-        if cached is not None:
-            if output == "json":
-                return {symbol: _df_to_json(cached)}
-            return cached
-
-    full_df = None
-    was_fetched = False
-
-    if use_cache:
-        # Step 1: Check in-memory batch cache (same process)
-        if _has_batch_cache(fetcher, source):
-            full_table = _get_batch_cache(fetcher, source)
-            if full_table is not None:
-                match_cols = [c for c in full_table.columns if c == symbol or c.startswith(symbol + "_")]
-                if match_cols:
-                    full_df = full_table[[match_cols[0]]].rename(columns={match_cols[0]: "value"}) if len(match_cols) == 1 else full_table[match_cols].copy()
-
-        # Step 2: Check disk cache for full table (cross-process / empty in-memory)
-        if full_df is None:
-            disk_df = _disk_cache.get(source, f"_{source}_full_table", frequency=effective_freq)
-            if disk_df is not None and len(disk_df):
-                overlaps = True
-                if start and disk_df.index.max() < pd.Timestamp(start):
-                    overlaps = False
-                if end and disk_df.index.min() > pd.Timestamp(end):
-                    overlaps = False
-                if overlaps:
-                    filtered = _filter_by_date(disk_df, start, end)
-                    match_cols = [c for c in filtered.columns if c == symbol or c.startswith(symbol + "_")]
-                    if match_cols:
-                        full_df = filtered[[match_cols[0]]].rename(columns={match_cols[0]: "value"}) if len(match_cols) == 1 else filtered[match_cols].copy()
-
-        # Step 3: Check disk cache for individual symbol
-        if full_df is None:
-            disk_df = _disk_cache.get(source, symbol, frequency=effective_freq)
-            if disk_df is not None and len(disk_df):
-                # Use cached data if it overlaps with requested range
-                # (cached data may not start as early or end as late as requested,
-                # but we serve what we have and merge on next fetch)
-                overlaps = True
-                if start and disk_df.index.max() < pd.Timestamp(start):
-                    overlaps = False
-                if end and disk_df.index.min() > pd.Timestamp(end):
-                    overlaps = False
-                if overlaps:
-                    filtered = _filter_by_date(disk_df, start, end)
-                    if len(filtered):
-                        full_df = filtered
-
-    # Step 4: Fetch if not found in cache
-    if full_df is None:
-        was_fetched = True
-        # Check if fetcher has batch cache (full table already loaded in-memory)
-        has_batch_cache = _has_batch_cache(fetcher, source)
-
-        df_fetched = None
-        if has_batch_cache:
-            batch_df = _get_batch_cache(fetcher, source)
-            if batch_df is not None and symbol in batch_df.columns:
-                df_fetched = batch_df[[symbol]].rename(columns={symbol: "value"})
-
-        if df_fetched is None:
-            df_fetched = fetcher.fetch(
-                symbol, start=start, end=end, sub_field=sub_field, frequency=effective_freq
-            )
-
-        full_df = _filter_by_date(df_fetched, start, end)
-
-    # Step 5: Store freshly fetched data in disk cache (only if use_cache)
-    if use_cache and was_fetched and full_df is not None:
-        try:
-            # If fetcher fetches full data regardless of start/end,
-            # store the unfiltered full table by symbol name so
-            # cross-process queries for different date ranges can use it
-            if getattr(fetcher, '_fetches_full_data', False) and df_fetched is not None:
-                _disk_cache.set(source, symbol, df_fetched, frequency=effective_freq)
-            elif not _has_batch_cache(fetcher, source):
-                existing = _disk_cache.get(source, symbol, frequency=effective_freq)
-                if existing is not None and len(existing):
-                    merged = pd.concat([existing, full_df])
-                    merged = merged[~merged.index.duplicated(keep="first")]
-                    merged.sort_index(inplace=True)
-                    _disk_cache.set(source, symbol, merged, frequency=effective_freq)
-                else:
-                    _disk_cache.set(source, symbol, full_df, frequency=effective_freq)
-            else:
-                for attr in _BATCH_CACHE_ATTRS:
-                    full_table = getattr(fetcher, attr, None)
-                    if full_table is not None and hasattr(full_table, 'get'):
-                        cached_df = full_table.get(source)
-                        if cached_df is not None and len(cached_df):
-                            _disk_cache.set(source, f"_{source}_full_table", cached_df, frequency=effective_freq)
-                            break
-                else:
-                    full_table = _get_batch_cache(fetcher, source)
-                    if full_table is not None and len(full_table):
-                        _disk_cache.set(source, f"_{source}_full_table", full_table, frequency=effective_freq)
-        except Exception:
-            pass
-
-    if sub_field and len(full_df.columns) > 1:
-        full_df = _apply_sub_field(full_df, sub_field)
-
-    if use_cache:
-        _cache.set(
-            source, symbol, full_df, start=start, end=end,
-            sub_field=sub_field, frequency=effective_freq
-        )
-
-    if output == "json":
-        return {symbol: _df_to_json(full_df)}
-    return full_df
-
-
 def _batch_query(
-    fetcher, source, symbols, start, end, sub_field, frequency, output, use_cache
+    fetcher, source, symbols, start, end, sub_field, frequency, output, use_cache, is_single=False
 ):
     effective_freq = _auto_frequency(source, start, end, frequency)
     results = {}
@@ -289,16 +152,14 @@ def _batch_query(
     disk_hit_symbols = []
     if use_cache and to_fetch:
         # Step 1: Check in-memory batch cache (same process)
-        in_memory_hit = False
         if _has_batch_cache(fetcher, source):
             full_table = _get_batch_cache(fetcher, source)
             if full_table is not None:
-                in_memory_hit = True
                 for s in to_fetch:
-                    if s in full_table.columns:
-                        filtered = full_table[[s]].copy()
-                        filtered = filtered.rename(columns={s: "value"})
-                        filtered = _filter_by_date(filtered, start, end)
+                    match_cols = [c for c in full_table.columns if c == s or c.startswith(s + "_")]
+                    if match_cols:
+                        candidate = full_table[[match_cols[0]]].rename(columns={match_cols[0]: "value"}) if len(match_cols) == 1 else full_table[match_cols].copy()
+                        filtered = _filter_by_date(candidate, start, end)
                         if sub_field and len(filtered.columns) > 1:
                             filtered = _apply_sub_field(filtered, sub_field)
                         if len(filtered):
@@ -312,9 +173,14 @@ def _batch_query(
                 continue
             disk_df = _disk_cache.get(source, f"_{source}_full_table", frequency=effective_freq)
             if disk_df is not None and len(disk_df):
-                covers_start = not start or disk_df.index.min() <= pd.Timestamp(start)
-                covers_end = not end or disk_df.index.max() >= pd.Timestamp(end)
-                if covers_start and covers_end:
+                # Use overlaps: cached data may not cover the full requested range,
+                # but we serve what we have and merge on next fetch
+                overlaps = True
+                if start and disk_df.index.max() < pd.Timestamp(start):
+                    overlaps = False
+                if end and disk_df.index.min() > pd.Timestamp(end):
+                    overlaps = False
+                if overlaps:
                     filtered = _filter_by_date(disk_df, start, end)
                     # For sources like moea where columns are "commodity_region" format,
                     # also check for columns that start with the symbol name
@@ -324,7 +190,6 @@ def _batch_query(
                             sub_df = filtered[[match_cols[0]]].rename(columns={match_cols[0]: "value"})
                         else:
                             sub_df = filtered[match_cols].copy()
-                        sub_df = _filter_by_date(sub_df, start, end)
                         if sub_field and len(sub_df.columns) > 1:
                             sub_df = _apply_sub_field(sub_df, sub_field)
                         if len(sub_df):
@@ -336,21 +201,36 @@ def _batch_query(
         for s in to_fetch:
             if s in disk_hit_symbols:
                 continue
-            disk_df = _disk_cache.get(source, s, frequency=effective_freq)
+            expected_cols = None
+            if getattr(fetcher, '_fetches_full_data', False):
+                expected_cols = getattr(fetcher, '_expected_columns', None)
+                if expected_cols is None:
+                    api_cols = getattr(fetcher, '_API_COLUMNS', None)
+                    if api_cols is not None:
+                        rename_map = getattr(fetcher, '_COLUMN_RENAME_MAP', {})
+                        expected_cols = [rename_map.get(c, c) for c in api_cols]
+
+            disk_df = _disk_cache.get(source, s, frequency=effective_freq, expected_columns=expected_cols)
             if disk_df is not None and len(disk_df):
-                covers_start = not start or disk_df.index.min() <= pd.Timestamp(start)
-                covers_end = not end or disk_df.index.max() >= pd.Timestamp(end)
-                if covers_start and covers_end:
+                # Use overlaps: cached data may not cover the full requested range,
+                # but we serve what we have and merge on next fetch
+                overlaps = True
+                if start and disk_df.index.max() < pd.Timestamp(start):
+                    overlaps = False
+                if end and disk_df.index.min() > pd.Timestamp(end):
+                    overlaps = False
+                if overlaps:
                     filtered = _filter_by_date(disk_df, start, end)
                     if sub_field and len(filtered.columns) > 1:
                         filtered = _apply_sub_field(filtered, sub_field)
                     if len(filtered):
                         results[s] = filtered
+                        disk_hit_symbols.append(s)
 
     still_to_fetch = [s for s in to_fetch if s not in disk_hit_symbols]
     if still_to_fetch:
         batch = fetcher.batch_fetch(
-            still_to_fetch, sub_field=sub_field, frequency=effective_freq
+            still_to_fetch, start=start, end=end, sub_field=sub_field, frequency=effective_freq
         )
 
         for s, df in batch.items():
@@ -359,18 +239,42 @@ def _batch_query(
                 filtered = _apply_sub_field(filtered, sub_field)
             results[s] = filtered
 
-        # Save full table to disk cache once after batch fetch
-        if use_cache and _has_batch_cache(fetcher, source):
-            for attr in ('_full_table_cache', '_full_data_cache', '_full_df_cache'):
-                full_table = getattr(fetcher, attr, None)
-                if full_table is not None and hasattr(full_table, 'get'):
-                    cached_df = full_table.get(source)
-                    if cached_df is not None and len(cached_df):
-                        try:
-                            _disk_cache.set(source, f"_{source}_full_table", cached_df, frequency=effective_freq)
-                        except Exception:
-                            pass
-                        break
+        # Save individual symbols to disk cache (cross-process queries)
+        if use_cache:
+            try:
+                for s in still_to_fetch:
+                    fetched_df = batch.get(s)
+                    if fetched_df is None:
+                        continue
+                    # If fetcher fetches full data regardless of start/end,
+                    # store the unfiltered full table by symbol name
+                    if getattr(fetcher, '_fetches_full_data', False):
+                        _disk_cache.set(source, s, fetched_df, frequency=effective_freq)
+                    elif not _has_batch_cache(fetcher, source):
+                        existing = _disk_cache.get(source, s, frequency=effective_freq)
+                        if existing is not None and len(existing):
+                            merged = pd.concat([existing, fetched_df])
+                            merged = merged[~merged.index.duplicated(keep="first")]
+                            merged.sort_index(inplace=True)
+                            _disk_cache.set(source, s, merged, frequency=effective_freq)
+                        else:
+                            _disk_cache.set(source, s, fetched_df, frequency=effective_freq)
+
+                # Save full table to disk cache for batch-cache fetchers
+                if _has_batch_cache(fetcher, source):
+                    for attr in _BATCH_CACHE_ATTRS:
+                        full_table = getattr(fetcher, attr, None)
+                        if full_table is not None and hasattr(full_table, 'get'):
+                            cached_df = full_table.get(source)
+                            if cached_df is not None and len(cached_df):
+                                _disk_cache.set(source, f"_{source}_full_table", cached_df, frequency=effective_freq)
+                                break
+                    else:
+                        full_table = _get_batch_cache(fetcher, source)
+                        if full_table is not None and len(full_table):
+                            _disk_cache.set(source, f"_{source}_full_table", full_table, frequency=effective_freq)
+            except Exception:
+                pass
 
         if use_cache:
             for s, df in results.items():
@@ -379,6 +283,14 @@ def _batch_query(
                         source, s, df, start=start, end=end,
                         sub_field=sub_field, frequency=effective_freq
                     )
+
+    if is_single and len(symbols) == 1:
+        s = symbols[0]
+        if output == "json":
+            return {s: _df_to_json(results[s])}
+        if output == "dataframe":
+            return results[s]
+        return {s: results[s]}
 
     if output == "json":
         return {s: _df_to_json(df) for s, df in results.items()}
@@ -415,11 +327,10 @@ def clear_disk_cache() -> None:
     import os
 
     global _disk_cache
-    today_str = date.today().strftime("%Y-%m-%d")
+    today_str = date.today().strftime(DATE_FORMAT)
     try:
         for f in _disk_cache._cache_dir.glob("*.db"):
-            if f.stem != today_str:
-                os.unlink(f)
+            os.unlink(f)
         _disk_cache.close()
         _disk_cache = DiskCache()
     except OSError:

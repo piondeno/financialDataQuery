@@ -99,6 +99,13 @@ class TestMoeaFetchFlow:
             "化學品_其他地區": [2.0, 3.0, 4.0],
         }, index=dates)
 
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        """Clear class-level cache before each test."""
+        MoeaFetcher._full_data_cache.clear()
+        yield
+        MoeaFetcher._full_data_cache.clear()
+
     def test_fetch_returns_all_regions_as_columns(self, mock_parsed_df):
         fetcher = MoeaFetcher()
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_parsed_df):
@@ -106,10 +113,8 @@ class TestMoeaFetchFlow:
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 3
-        # Columns should be region names only (without commodity prefix)
         for region in REGION_NAMES:
             assert region in result.columns
-        # Should NOT have "value" column or "化學品_美國" column
         assert "value" not in result.columns
         assert "化學品_美國" not in result.columns
 
@@ -118,7 +123,6 @@ class TestMoeaFetchFlow:
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_parsed_df):
             result = fetcher.fetch("化學品")
 
-        # All columns should be region names
         assert set(result.columns) == set(REGION_NAMES)
 
     def test_fetch_values_correctly_mapped(self, mock_parsed_df):
@@ -126,7 +130,6 @@ class TestMoeaFetchFlow:
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_parsed_df):
             result = fetcher.fetch("化學品")
 
-        # Check first row values
         assert result.iloc[0]["美國"] == 17.0
         assert result.iloc[0]["日本"] == 15.0
         assert result.iloc[0]["中國大陸及香港"] == 10.0
@@ -148,7 +151,8 @@ class TestMoeaFetchFlow:
                 fetcher.fetch("不存在的商品")
 
     def test_fetch_no_data_raises(self):
-        empty_df = pd.DataFrame(index=pd.date_range("1984-09", periods=3, freq="ME"))
+        """Test with a truly empty DataFrame (no columns)."""
+        empty_df = pd.DataFrame()
         fetcher = MoeaFetcher()
         with mock.patch.object(fetcher, "_get_full_data", return_value=empty_df):
             with pytest.raises(FetchError, match="無法取得"):
@@ -182,34 +186,24 @@ class TestMoeaFetchFlow:
 class TestMoeaBatchFetch:
     """Test batch_fetch() for efficiency (single browser session)."""
 
-    @pytest.fixture
-    def mock_parsed_df(self, request):
-        # Create a DataFrame with multiple commodities' data across all regions
-        dates = pd.date_range("1984-09", periods=3, freq="ME")
-        columns = {}
-        
-        for comm in ["化學品", "電子產品"]:
-            for region in REGION_NAMES:
-                col_name = f"{comm}_{region}"
-                if comm == request.instance.commodity_list[0] and region == REGION_NAMES[0]:
-                    columns[col_name] = [17.0, 18.0, 20.0]
-                elif comm == request.instance.commodity_list[1] and region == REGION_NAMES[0]:
-                    columns[col_name] = [29.0, 34.0, 30.0]
-                else:
-                    columns[col_name] = [i for i in range(5, 8)]
-        
-        return pd.DataFrame(columns, index=dates)
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        """Clear class-level cache before each test."""
+        MoeaFetcher._full_data_cache.clear()
+        yield
+        MoeaFetcher._full_data_cache.clear()
 
-    def test_batch_fetch_returns_dict(self):
-        import pandas as pd
-        
+    def _create_batch_mock_df(self):
+        """Create a DataFrame with multiple commodities' data across all regions."""
         dates = pd.date_range("1984-09", periods=3, freq="ME")
         columns = {}
         for comm in ["化學品", "電子產品"]:
             for region in REGION_NAMES:
                 columns[f"{comm}_{region}"] = [i for i in range(5, 8)]
-        
-        mock_df = pd.DataFrame(columns, index=dates)
+        return pd.DataFrame(columns, index=dates)
+
+    def test_batch_fetch_returns_dict(self):
+        mock_df = self._create_batch_mock_df()
 
         fetcher = MoeaFetcher()
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_df):
@@ -222,13 +216,7 @@ class TestMoeaBatchFetch:
         assert "電子產品" in results
 
     def test_batch_each_commodity_has_region_columns(self):
-        dates = pd.date_range("1984-09", periods=3, freq="ME")
-        columns = {}
-        for comm in ["化學品", "電子產品"]:
-            for region in REGION_NAMES:
-                columns[f"{comm}_{region}"] = [i for i in range(5, 8)]
-
-        mock_df = pd.DataFrame(columns, index=dates)
+        mock_df = self._create_batch_mock_df()
 
         fetcher = MoeaFetcher()
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_df):
@@ -237,26 +225,18 @@ class TestMoeaBatchFetch:
 
         for s, df in results.items():
             assert isinstance(df, pd.DataFrame)
-            # Should have region columns, NOT 'value' column
             assert "value" not in df.columns
             assert set(df.columns) == set(REGION_NAMES)
             assert len(df) == 3
 
     def test_batch_one_browser_session(self):
-        dates = pd.date_range("1984-09", periods=3, freq="ME")
-        columns = {}
-        for comm in ["化學品", "電子產品"]:
-            for region in REGION_NAMES:
-                columns[f"{comm}_{region}"] = [i for i in range(5, 8)]
-
-        mock_df = pd.DataFrame(columns, index=dates)
+        mock_df = self._create_batch_mock_df()
 
         fetcher = MoeaFetcher()
         with mock.patch.object(fetcher, "_get_full_data", return_value=mock_df) as mock_get:
             symbols = ["化學品", "電子產品"]
             results = fetcher.batch_fetch(symbols)
 
-        # _get_full_data should only be called ONCE for all commodities
         assert mock_get.call_count == 1
 
 
@@ -274,6 +254,13 @@ class TestMoeaRegistration:
 class TestMoeaIntegration:
     """Integration tests using the real query() API with mocked browser."""
 
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        """Clear class-level cache before each test."""
+        MoeaFetcher._full_data_cache.clear()
+        yield
+        MoeaFetcher._full_data_cache.clear()
+
     @pytest.fixture
     def mock_df(self):
         dates = pd.date_range("1984-09", periods=3, freq="ME")
@@ -290,7 +277,6 @@ class TestMoeaIntegration:
 
         assert isinstance(result, dict)
         assert "化學品" in result
-        # Should have all region columns per record (not 'value')
         record = result["化學品"][0]
         assert "date" in record
         for region in REGION_NAMES:
@@ -305,7 +291,6 @@ class TestMoeaIntegration:
         assert len(result) == 3
         for region in REGION_NAMES:
             assert region in result.columns
-        # Should NOT have 'value' column or 'Symbol' column
         assert "value" not in result.columns
         assert "Symbol" not in result.columns
 
@@ -328,7 +313,6 @@ class TestMoeaIntegration:
             from financial_data_query import query
             result = query("moea", ["化學品"], output="dataframe")
 
-        # Single commodity batch should still be a DataFrame  
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 3
         for region in REGION_NAMES:

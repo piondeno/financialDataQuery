@@ -26,7 +26,7 @@ except ImportError:
     _HAS_DEPS = False
 
 # Region names in the MOEA website tables ( Traditional Chinese)
-REGION_NAMES = ["美國", "日本", "中國大陸及香港", "東協", "歐洲", "其他地區"]
+REGION_NAMES = ["地區別總計", "美國", "日本", "中國大陸及香港", "東協", "歐洲", "其他地區"]
 
 
 class MoeaFetcher(DataSourceFetcher, ABC):
@@ -40,7 +40,8 @@ class MoeaFetcher(DataSourceFetcher, ABC):
     Available commodity codes (商品代號):
         化學品, 塑膠、橡膠及其製品, 紡織品, 基本金屬及其製品,
         電子產品, 機械, 電機產品, 資訊與通信產品,
-        運輸工具及其設備, 光學器材, 礦產品, 其他
+        運輸工具及其設備, 光學器材, 礦產品, 其他,
+        貨品類別總計
 
     Available regions (地區):
         美國, 日本, 中國大陸及香港, 東協, 歐洲, 其他地區
@@ -60,22 +61,26 @@ class MoeaFetcher(DataSourceFetcher, ABC):
         "化學品", "塑膠、橡膠及其製品", "紡織品", "基本金屬及其製品",
         "電子產品", "機械", "電機產品", "資訊與通信產品",
         "運輸工具及其設備", "光學器材", "礦產品", "其他",
+        "貨品類別總計",
     ]
 
     def _parse_table_html(self, html: str) -> pd.DataFrame:
         """Parse the MOEA cross-table format from HTML.
 
         Table structure (after query):
-        - Row 0: Region headers (美國 colspan=12, 日本 colspan=12, etc.)
-        - Row 1: Commodity names under each region (12 per region)
-        - Rows 2+: Data rows with year in col[0], month in col[1], then values
+        - Row 0: Overall header ("地區別總計" colspan=91) — no individual regions
+        - Row 1: Region headers (美國 colspan=13, 日本 colspan=13, etc.)
+        - Row 2: Subtotal names ("貨品類別總計" colspan=13 for each region)
+        - Row 3: Individual commodity names (1 per cell, 12 per region)
+        - Rows 4+: Data rows with year in col[0], month in col[1], then values
 
-        Column layout:
+        Column layout (dynamic, depends on checkbox selection):
           Col[0]: Year label (e.g., "73年") — only on first month of year
           Col[1]: Month label (e.g., "9月", "10月") — always present
-          Cols[2-13]: 美國 data for 12 commodities
-          Cols[14-25]: 日本 data for 12 commodities
-          ... and so on for each region
+          Cols[2+]: Commodity data for each region
+
+        Column headers are parsed dynamically from row 1 (regions) and row 3 (commodities),
+        adapting to the number of columns based on checkbox selections.
 
         Returns DataFrame with DatetimeIndex (month periods) and symbol columns.
         """
@@ -90,24 +95,63 @@ class MoeaFetcher(DataSourceFetcher, ABC):
             raise FetchError("無法解析表格: HTML 中找不到資料表")
 
         rows = result_table.find_all("tr")
-        if len(rows) < 3:
+        if len(rows) < 5:
             raise FetchError("表格資料不足")
 
-        # Build column header mapping from row 1 (commodities under regions)
-        commodities = self.VALID_COMMODITIES  # 12 items
+        # Build column header mapping dynamically from row 1 (regions) and row 3 (commodities)
+        # Row 1 contains region headers with colspans
+        # Row 2 contains subtotal names (貨品類別總計 with colspan)
+        # Row 3 contains individual commodity/subtotal names under each region
+        row1 = rows[1]
+        row2 = rows[2]
+        row3 = rows[3]
 
-        # Parse symbol names: commodity_region for each column
+        # Parse region -> cell offset mapping from row 1
+        # Cells [0] and [1] are year/month columns — skip them
+        # Cell [2] is "地區別總計" (empty, span=13)
+        # Cells [3+] are named regions (美國, 日本, etc.)
+        region_cells = row1.find_all(["td", "th"])
+        region_col_map = []  # list of (data_col_offset, cell_span, region_name) in order
+        data_col_offset = 0  # offset relative to data columns (after year/month)
+        first_named_region = False
+        for i, cell in enumerate(region_cells):
+            if i < 2:
+                continue  # Skip year/month header cells
+            text = cell.get_text().strip()
+            span = int(cell.get("colspan", 1))
+            if text in REGION_NAMES and text != "地區別總計":
+                first_named_region = True
+                region_col_map.append((data_col_offset, span, text))
+            elif not text and not first_named_region:
+                # Empty cell before first named region = "地區別總計"
+                region_col_map.append((data_col_offset, span, "地區別總計"))
+                # Note: cells AFTER the first named region that are empty are trailing cells — skip
+            data_col_offset += span
+
+        # Build col_index -> "commodity_region" mapping
+        # Row 3 cell at index global_col_idx directly corresponds to data column global_col_idx.
+        # Row 2 has 貨品類別總計 with colspan for each region — use for subtotal names.
+        # Row 3 has individual commodity names (with empty cells for subtotal positions).
+        comm_cells_r3 = row3.find_all(["td", "th"])
+
         col_symbols = {}  # col_index -> "commodity_region"
-        for region_idx, region in enumerate(REGION_NAMES):
-            for comm_idx, comm in enumerate(commodities):
-                col_idx = 2 + region_idx * len(commodities) + comm_idx
-                col_symbols[col_idx] = f"{comm}_{region}"
+        for data_col_offset, cell_span, region_name in region_col_map:
+            for local_idx in range(cell_span):
+                global_col_idx = 2 + data_col_offset + local_idx
+                if global_col_idx >= len(comm_cells_r3):
+                    break
+                comm_text = comm_cells_r3[global_col_idx].get_text().strip()
+                if comm_text:
+                    col_symbols[global_col_idx] = f"{comm_text}_{region_name}"
+                elif local_idx == 0:
+                    # First cell of each region is the subtotal
+                    col_symbols[global_col_idx] = f"貨品類別總計_{region_name}"
 
-        # Parse data rows (skip first 2 header rows)
+        # Parse data rows (skip first 4 header rows: row 0-3)
         current_year_roc = None
         data_records = []
 
-        for row in rows[2:]:
+        for row in rows[4:]:
             cells = row.find_all(["td", "th"])
             if len(cells) < 3:
                 continue
@@ -202,7 +246,7 @@ class MoeaFetcher(DataSourceFetcher, ABC):
 
         Steps:
         1. Select date '73年9月' from dropdown
-        2-4. Check tree-view checkboxes (Item1n0, Item2n1, Item3n1)
+        2-4. Check tree-view checkboxes (Item1n0, Item2n0, Item2n1, Item3n0, Item3n1)
         5. Click query button and wait for results
         6. Return panVaule panel content as HTML string
         """
@@ -243,7 +287,9 @@ class MoeaFetcher(DataSourceFetcher, ABC):
         # Steps 2-4: Check tree-view checkboxes
         checkbox_ids = [
             "ContentPlaceHolder1_tvItem1n0CheckBox",
+            "ContentPlaceHolder1_tvItem2n0CheckBox",
             "ContentPlaceHolder1_tvItem2n1CheckBox",
+            "ContentPlaceHolder1_tvItem3n0CheckBox",
             "ContentPlaceHolder1_tvItem3n1CheckBox",
         ]
 

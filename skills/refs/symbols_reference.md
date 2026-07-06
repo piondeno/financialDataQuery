@@ -86,6 +86,32 @@
 
 ---
 
+## 資料源：`stooq`
+
+| 類別 | 代號 | 中文說明 |
+|------|------|---------|
+| 美股 | `aapl.us` | Apple |
+| 美股 | `tsla.us` | Tesla |
+| 美股 | `msft.us` | Microsoft |
+| 指數 | `sp500.c` | S&P 500 |
+| 指數 | `dx.c` | 美元指數 |
+| 匯率 | `usdeurf.f` | 歐元兌美元 |
+| 期貨 | `gold.cf` | 黃金期貨 |
+| 加密貨幣 | `btcusd.cc` | 比特幣 |
+
+呼叫格式：`{"source":"stooq","symbols":["aapl.us"]}`
+
+**注意事項：**
+- 商品代號後綴：`.us`（美股）、`.c`（指數）、`.f`（匯率）、`.cf`（期貨）、`.cc`（加密貨幣）
+- 需要 Chrome 瀏覽器安裝在系統中
+- 支援 `frequency`：`"1d"`（日）、`"1wk"`（周）、`"1mo"`（月）、`"3mo"`（季）、`"1y"`（年）
+- 支援 `sub_field`：`"Open"`、`"High"`、`"Low"`、`"Close"`、`"Volume"`
+- 批量查詢會共用同一個瀏覽器實例
+- CAPTCHA 識別需要本地 LLM（預設 `localhost:12345`，model `qwen3.5-9b`）
+- 爬蟲速度較慢，每次查詢約需數秒
+
+---
+
 ## 資料源：`usTreasuryApi`
 
 | 類別 | 代號 | 中文說明 |
@@ -410,4 +436,26 @@ OptionCharts 選擇權歷史數據（日頻），支援 `frequency` 參數做週
 - 原始數據為日頻，`frequency` 可設 `weekly`、`monthly`、`quarterly` 進行重採樣
 - Volume 欄位按頻率累加（sum），其他欄位取最後交易日值（last）
 - 資料範圍：2024-06-28 至今
+
+---
+
+## 資料源：`mql5`
+
+| 類別 | 代號 | 中文說明 |
+|------|------|---------|
+| PMI | `eu_markit_composite_pmi` | 歐元區 Markit 綜合 PMI（今值/預測值/前值） |
+| PMI | `eu_markit_manufacturing_pmi` | 歐元區 Markit 製造業 PMI（今值/預測值/前值） |
+| PMI | `china_caixin_composite_pmi` | 中國財新綜合 PMI（今值/預測值/前值） |
+| PMI | `china_manufacturing_pmi` | 中國製造業 PMI（今值/預測值/前值） |
+| PMI | `china_caixin_manufacturing_pmi` | 中國財新製造業 PMI（今值/預測值/前值） |
+| PMI | `japan_markit_composite_pmi` | 日本 Markit 綜合 PMI（今值/預測值/前值） |
+| PMI | `brazil_markit_composite_pmi` | 巴西 Markit 綜合 PMI（今值/預測值/前值） |
+| PMI | `aus_cba_composite_pmi` | 澳洲 CBA 綜合 PMI（今值/預測值/前值） |
+| PMI | `us_markit_composite_pmi` | 美國 Markit 綜合 PMI（今值/預測值/前值） 看清全美經濟全貌的終極指標|
+| PMI | `us_markit_manufacturing_pmi` | 美國 Markit 製造業 PMI（今值/預測值/前值）涵蓋面更廣的中小企業視角 |
+| PMI | `us_ism_manufacturing_pmi` | 美國 ISM 製造業 PMI（今值/預測值/前值） 市場敏感度最高、歷史最悠久|
+
+呼叫格式：`{"source":"mql5","symbols":["eu_markit_composite_pmi"]}`
+
+回傳欄位：`actual`（今值）、`forecast`（預測值）、`previous`（前值），部分日期可能為 NaN
 

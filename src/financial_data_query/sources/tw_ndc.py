@@ -23,7 +23,20 @@ except ImportError:
 
 
 class NdcFetcher(DataSourceFetcher, ABC):
+    """Base class for NDC (國家發展委員會) data sources.
+
+    Fetches data via browser automation (undetected-chromedriver) by:
+    1. Opening the NDC website
+    2. Clicking "select all" and sliding to load all historical data
+    3. Switching to table view and parsing the HTML table
+
+    The full table is cached in-memory (per-process) and on disk (cross-process).
+    Cross-process concurrency is handled by `fcntl.flock` in `_batch_query`,
+    not here — only one process opens a browser per source at a time.
+    """
+
     base_url: str = ""
+    # Per-process in-memory cache: keyed by source_name (tw_eco / tw_pmi)
     _full_table_cache: dict = {}
 
     def _get_full_table_cached(self) -> pd.DataFrame:
@@ -74,6 +87,15 @@ class NdcFetcher(DataSourceFetcher, ABC):
         return df
 
     def _interact_page(self, driver) -> str:
+        """Simulate user interaction to load all historical data.
+
+        Steps:
+        1. Click "select all indicators" checkbox
+        2. Drag the time slider to the far right (PAGE_DOWN x10)
+        3. Set month range to full year (Jan 1 - Dec 12)
+        4. Switch to table view
+        5. Return the table HTML
+        """
         select_all_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "#select_all_1"))
         )

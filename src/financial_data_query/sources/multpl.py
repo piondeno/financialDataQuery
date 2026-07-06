@@ -20,7 +20,17 @@ _SYMBOL_MAP = {
 
 
 class MultplFetcher(DataSourceFetcher):
+    """Multpl (Rule #1) market valuation data.
+
+    Scrapes HTML tables from multpl.com. Commonly used for SP500 PE ratio,
+    Shiller PE (CAPE), dividend yield, etc. Data is fetched fresh each time
+    and cached in the disk cache by the query system.
+    """
+
     source_name = "multpl"
+    # Full data caching: API returns ALL historical data for each symbol without date params.
+    # _fetches_full_data = True: disk cache stores the complete data;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
 
     def fetch(

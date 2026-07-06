@@ -19,7 +19,20 @@ _OPTIONCHARTS_OUTPUT_COLS = [
 
 
 class OptionchartsFetcher(DataSourceFetcher):
+    """OptionCharts options flow data.
+
+    Fetches option volume and open interest history via their async API.
+    The HTML response contains a table with daily data. Column names with
+    spaces removed (e.g., "Option VolumeTotal") are renamed to include spaces.
+
+    Supports frequency resampling: weekly sums volume, monthly/quarterly
+    use last value for ratios and last for prices.
+    """
+
     source_name = "optioncharts"
+    # Full data caching: API returns ALL historical data with period="max"; no date params.
+    # _fetches_full_data = True: disk cache stores the complete data;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
 
     def _fetch_raw(self, symbol: str) -> dict:

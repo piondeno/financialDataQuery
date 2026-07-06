@@ -95,7 +95,37 @@ def validate_symbol(symbol: str, symbol_map: dict, source_name: str) -> None:
 
 
 class DataSourceFetcher(ABC):
-    """Abstract base class for all data source fetchers."""
+    """Abstract base class for all data source fetchers.
+
+    Subclasses set _fetches_full_data to control caching behavior:
+
+    _fetches_full_data = True:
+        batch_fetch() returns the API's complete response WITHOUT date filtering.
+        The query layer (_batch_query) is responsible for filtering by start/end.
+
+        Cache flow:
+            1. Check in-memory cache (LRU, key includes start/end)
+            2. Check disk per-symbol cache (stores FULL data, key is source+symbol)
+            3. If disk hit: validate _expected_columns, filter by date range, return
+            4. If disk miss: fetch full data from API → store full data to disk → filter → return
+            5. Cross-process lock double-check: re-read disk cache after lock, filter
+
+        Disk write: direct overwrite (the stored data is already complete, no merge needed)
+
+        Sources: MacroMicro, Multpl, Zillow, Optioncharts, Finra, ICI, UsTreasury
+
+    _fetches_full_data = False (default):
+        batch_fetch() returns pre-filtered data — the API itself supports date parameters.
+
+        Cache flow:
+            1. Check in-memory cache
+            2. Check disk per-symbol cache
+            3. If disk miss: fetch filtered data from API → merge with existing cache → return
+
+        Disk write: merge with existing (concat + dedup + sort) for incremental updates
+
+        Sources: Yahoo, FRED, Stooq, AkShare
+    """
 
     source_name: str = ""
 
@@ -123,6 +153,10 @@ class DataSourceFetcher(ABC):
 
         Default implementation calls fetch() for each symbol sequentially.
         Subclasses may override to optimize (e.g., shared browser session).
+
+        NOTE: For _fetches_full_data = True fetchers, this method MUST return the API's
+        complete response WITHOUT date filtering. The disk cache stores the full data,
+        and the query layer (_batch_query) filters by start/end after reading from cache.
         """
         results = {}
         for symbol in symbols:

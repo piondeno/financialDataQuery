@@ -34,7 +34,7 @@ df = query("yahoo", "AAPL", output="dataframe")
 
 | 參數 | 類型 | 說明 |
 |------|------|------|
-| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"akshare"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"`, `"moea"`, `"zillow"`, `"optioncharts"` |
+| `source` | `str` | 資料來源名稱：`"yahoo"`, `"fred"`, `"stooq"`, `"akshare"`, `"finra_margin"`, `"ici"`, `"tw_eco"`, `"tw_pmi"`, `"macroMicro"`, `"usTreasuryApi"`, `"multpl"`, `"moea"`, `"zillow"`, `"optioncharts"`, `"mql5"` |
 | `symbol` | `str \| list[str]` | 商品代碼，或代號清單進行批量查詢 |
 | `start` | `str` | 開始日期 `YYYY-MM-DD`，可選 |
 | `end` | `str` | 結束日期 `YYYY-MM-DD`，可選 |
@@ -715,6 +715,49 @@ result = query("optioncharts", ["$SPX", "$NDX"])
 **注意事項：**
 - 原始數據為日頻，`frequency` 可設 `weekly`、`monthly`、`quarterly` 進行重採樣
 - Volume 欄位按頻率累加（sum），其他欄位取最後交易日值（last）
+
+### MQL5 經濟日曆 (`"mql5"`)
+
+- 底層：`requests` 直接下載 MQL5 經濟日曆 TSV 數據
+- 免 API key，無需瀏覽器
+- 資料來源：MQL5 Economic Calendar (https://www.mql5.com/en/economic-calendar)
+- 資料範圍：約 10 年歷史，每月更新
+- 批量查詢內建 2 秒延遲，避免被限流
+
+**Symbols：**
+
+| Symbol | 說明 |
+|--------|------|
+| `eu_markit_composite_pmi` | 歐元區 Markit 綜合 PMI |
+| `china_caixin_composite_pmi` | 中國財新綜合 PMI |
+| `japan_markit_composite_pmi` | 日本 Markit 綜合 PMI |
+| `brazil_markit_composite_pmi` | 巴西 Markit 綜合 PMI |
+| `aus_cba_composite_pmi` | 澳洲 CBA 綜合 PMI |
+| `us_markit_composite_pmi` | 美國 Markit 綜合 PMI |
+
+**回傳欄位：**
+
+| 欄位 | 說明 |
+|------|------|
+| `actual` | 今值（實際公布值） |
+| `forecast` | 預測值 |
+| `previous` | 前值 |
+
+```python
+# 查詢歐元區綜合 PMI
+result = query("mql5", "eu_markit_composite_pmi")
+
+# 指定日期範圍
+result = query("mql5", "eu_markit_composite_pmi", start="2024-01-01", end="2024-12-31")
+
+# 批量查詢多個國家
+result = query("mql5", ["eu_markit_composite_pmi", "china_caixin_composite_pmi", "japan_markit_composite_pmi"])
+```
+
+**注意事項：**
+- 部分日期的 `actual`、`forecast`、`previous` 可能為 `NaN`（尚未公布或無數據）
+- 批量查詢時自動加入 2 秒延遲，避免被 MQL5 限流
+- 回傳 JSON 時 `NaN` 值顯示為 `null`
 
 ## 設定
 

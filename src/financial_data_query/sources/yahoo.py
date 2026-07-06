@@ -16,6 +16,12 @@ _YAHOO_COLUMN_MAP = {
 
 
 class YahooFetcher(DataSourceFetcher):
+    """Yahoo Finance market data via yfinance.
+
+    Supports daily/weekly/monthly frequency. Use sub_field to extract
+    a specific column (open/high/low/close/volume/adjclose).
+    """
+
     source_name = "yahoo"
     _FREQUENCY_MAP = FREQUENCY_YAHOO_INTERVALS
 

@@ -102,7 +102,20 @@ def macroMicroSymbolLinkConnect(url: str) -> None:
 
 
 class MacroMicroFetcher(DataSourceFetcher):
+    """MacroMicro economic data via browser automation.
+
+    Before querying, symbols must be registered with macroMicroSymbolLinkConnect()
+    to establish a URL mapping. Data is extracted from Highcharts charts on each
+    page by reading the JavaScript chart data directly (no DOM parsing needed).
+
+    The links file (.macroMicro_links.json) stores symbol -> URL mappings and
+    is automatically synced to README.md via marker-based section replacement.
+    """
+
     source_name = "macroMicro"
+    # Full data caching: Highcharts charts contain ALL historical data; no date filtering on fetch.
+    # _fetches_full_data = True: disk cache stores the complete data per symbol;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
 
     def _extract_highcharts_data(self, driver):

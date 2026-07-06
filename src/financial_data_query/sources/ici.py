@@ -153,8 +153,23 @@ _SYMBOL_MAP = {
 
 
 class IciFetcher(DataSourceFetcher):
+    """ICI (Investment Company Institute) fund flow data.
+
+    Downloads Excel files with multi-row headers. Each prefix (mf/etf/combined/mmf_*)
+    maps to a specific sheet and header configuration. The Excel cache is two-level:
+    _excel_cache[cache_key][prefix] to avoid re-reading the same file for related symbols.
+
+    E.g., mmf_gov / mmf_prime / mmf_taxexempt all share the same Excel file (cache_key="mmf"),
+    but read different sheets.
+    """
+
     source_name = "ici"
+    # Two-level cache: {cache_key: {prefix: DataFrame}}
+    # cache_key groups symbols that share the same Excel file
     _excel_cache: dict[str, dict[str, pd.DataFrame]] = {}
+    # Full data caching: each Excel download returns ALL historical data for a sheet.
+    # _fetches_full_data = True: disk cache stores the complete data per symbol;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
     _tmp_path_cache: str | None = None
 
@@ -251,6 +266,19 @@ class IciFetcher(DataSourceFetcher):
 
     @staticmethod
     def _merge_headers(df: pd.DataFrame, header_rows: list[int]) -> dict[str, int]:
+        """Merge multi-row headers into flat column names.
+
+        ICI Excel files have headers spread across 2-3 rows. This method combines
+        all header rows into a single column name by joining non-empty values.
+        E.g., row4="Equity", row5="Total equity" -> "Equity Total equity"
+
+        Args:
+            df: Raw DataFrame with header rows still as data.
+            header_rows: Which rows contain headers (0-indexed).
+
+        Returns:
+            Dict mapping merged column name -> column index.
+        """
         merged = {}
         for col_idx in range(df.shape[1]):
             parts = []

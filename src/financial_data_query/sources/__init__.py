@@ -69,5 +69,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from financial_data_query.sources.mql5 import Mql5Fetcher
+    Registry.register(Mql5Fetcher)
+except ImportError:
+    pass
+
 Registry.register(YahooFetcher)
 Registry.register(FredFetcher)

@@ -37,6 +37,19 @@ _MONTH_MAP = {
 
 
 class StooqFetcher(DataSourceFetcher):
+    """Stooq market data via browser automation.
+
+    Downloads CSV files by:
+    1. Navigating to the symbol page
+    2. Setting frequency, date range, clicking Show
+    3. Clicking the CSV download link
+    4. Reading the downloaded CSV file
+
+    Includes CAPTCHA handling: detects CAPTCHA, uses GPT-Vision to solve it,
+    and retries up to 5 times. batch_fetch reuses the same browser session
+    for all symbols (one browser open, multiple downloads).
+    """
+
     source_name = "stooq"
 
     _FREQUENCY_MAP = _FREQUENCY_TO_VALUE

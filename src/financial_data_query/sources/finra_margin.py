@@ -17,7 +17,16 @@ _SYMBOL_MAP = {
 
 
 class FinraMarginFetcher(DataSourceFetcher):
+    """FINRA Customer Margin Balances data from monthly Excel download.
+
+    The Excel file is downloaded once and cached in-memory. Three symbols are
+    available: debit_balances, free_credit_cash, free_credit_margin.
+    """
+
     source_name = "finra_margin"
+    # Full data caching: API returns a static Excel with ALL historical data.
+    # _fetches_full_data = True: disk cache stores the complete DataFrame;
+    # query layer filters by start/end on each read.
     _full_df_cache: pd.DataFrame | None = None
     _tmp_path_cache: str | None = None
     _fetches_full_data = True

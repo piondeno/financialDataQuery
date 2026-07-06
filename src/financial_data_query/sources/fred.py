@@ -10,6 +10,15 @@ _FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
 class FredFetcher(DataSourceFetcher):
+    """FRED (Federal Reserve Economic Data) API.
+
+    Requires FRED_API_KEY environment variable. Returns a single-column
+    DataFrame with 'value' as the data column and DatetimeIndex.
+
+    batch_fetch is overridden to return empty DataFrames for failed symbols
+    instead of raising, so one bad symbol doesn't stop the batch.
+    """
+
     source_name = "fred"
 
     def validate_config(self) -> bool:

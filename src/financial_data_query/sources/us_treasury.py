@@ -85,13 +85,14 @@ def _get_numeric_columns():
 # 每頁最大筆數
 _PAGE_SIZE = 10000
 
-# 模組層快取：解析後的 DataFrame，避免每次都重新下載
+# Module-level caches to avoid re-downloading the full API response.
+# These persist across query() calls within the same process.
 _cached_df: pd.DataFrame | None = None
 
-# 模組層快取：原始記錄，用於到期債務計算
+# Raw API records, used by _calculate_debt_maturity for on-the-fly aggregation
 _cached_raw_records: list | None = None
 
-# 到期債務計算的快取
+# Debt maturity calculation cache: keyed by (start_date, end_date)
 _debt_maturity_cache: dict[tuple[str, str], tuple[datetime, pd.DataFrame]] | None = None
 
 
@@ -99,6 +100,11 @@ class UsTreasuryFetcher(DataSourceFetcher):
     """美國財政部公債拍賣資料來源。"""
 
     source_name = "usTreasuryApi"
+    # Full data caching: API returns ALL auction records across all pages; no date filtering.
+    # For regular symbols: full auction data is stored, query layer filters by start/end.
+    # For debtMaturity: raw records are downloaded and aggregated on-the-fly using start/end.
+    # _fetches_full_data = True: disk cache stores the complete data;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
 
     @property

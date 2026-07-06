@@ -33,6 +33,14 @@ _PMI_SYMBOLS = {
 
 
 class AkShareFetcher(DataSourceFetcher):
+    """AkShare financial data (China markets & global macro).
+
+    Handles three categories:
+    1. A-share stocks (stock_zh_a_hist) — supports frequency and sub_field
+    2. Special indices (BDI, WCI) — via _fetch_special
+    3. PMI data — via _process_pmi_df with Chinese column normalization
+    """
+
     source_name = "akshare"
 
     def fetch(

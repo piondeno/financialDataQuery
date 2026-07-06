@@ -1,6 +1,6 @@
 ---
 name: financial-data-query
-description: 統一金融資料查詢 API，支援 Yahoo Finance、FRED、Stooq、AkShare、MOEA、FINRA、ICI、台灣 NCD（tw_eco/tw_pmi）、MacroMicro、Zillow、OptionCharts 等多個資料來源
+description: 統一金融資料查詢 API，支援 Yahoo Finance、FRED、Stooq、AkShare、MOEA、FINRA、ICI、台灣 NCD（tw_eco/tw_pmi）、MacroMicro、Zillow、OptionCharts、MQL5 等多個資料來源
 ---
 
 # Financial Data Query — 使用方式

@@ -3,7 +3,11 @@ import pandas as pd
 
 
 class QueryCache:
-    """In-memory LRU cache for query results."""
+    """In-memory LRU cache for query results.
+
+    Uses OrderedDict for O(1) move-to-end on access. Cache key includes all
+    query parameters to ensure exact match (source + symbol + date range + field + frequency).
+    """
 
     def __init__(self, max_size: int = 128):
         self.   _cache: OrderedDict[tuple[str, str, str | None, str | None, str | None, str | None], pd.DataFrame] = OrderedDict()

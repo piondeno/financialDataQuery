@@ -31,7 +31,19 @@ _METADATA_COLS = ["RegionID", "SizeRank", "RegionName", "RegionType", "StateName
 
 
 class ZillowFetcher(DataSourceFetcher):
+    """Zillow real estate research data.
+
+    Downloads CSV files from zillowstatic.com for various real estate indicators.
+    Each symbol (ZHVI, ZORF, etc.) maps to a specific CSV URL. Data is pivoted
+    from wide format (dates as columns) to long format (dates as index).
+
+    Use sub_field to filter by region (e.g., "US" for national, "NY" for NYC).
+    """
+
     source_name = "zillow"
+    # Full data caching: CSV download returns ALL historical data; no date filtering on API side.
+    # _fetches_full_data = True: disk cache stores the complete data;
+    # query layer filters by start/end on each read.
     _fetches_full_data = True
 
     def _download_csv(self, url: str) -> pd.DataFrame:
